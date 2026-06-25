@@ -31,6 +31,8 @@ CREATE TABLE "users" (
   "password_hash" varchar(255) NOT NULL,
   "role" user_role NOT NULL DEFAULT 'owner',
   "is_active" boolean NOT NULL DEFAULT true,
+  "reset_token" varchar(255),
+  "reset_token_expires_at" timestamp,
   "created_at" timestamp NOT NULL DEFAULT (now())
 );
 
@@ -131,6 +133,10 @@ COMMENT ON COLUMN "users"."id" IS 'Primary key';
 COMMENT ON COLUMN "users"."password_hash" IS 'bcrypt hashed';
 
 COMMENT ON COLUMN "users"."is_active" IS 'Admin can deactivate login';
+
+COMMENT ON COLUMN "users"."reset_token" IS 'Secure random token for password reset — null when no reset is pending';
+
+COMMENT ON COLUMN "users"."reset_token_expires_at" IS 'Token expiry — reset link invalid after this timestamp';
 
 COMMENT ON COLUMN "businesses"."id" IS 'Used in public booking URL';
 
