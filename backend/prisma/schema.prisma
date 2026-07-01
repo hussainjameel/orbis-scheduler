@@ -1,0 +1,158 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           Int        @id @default(autoincrement())
+  name         String     @db.VarChar(100)
+  email        String     @unique @db.VarChar(255)
+  passwordHash String     @db.VarChar(255)
+  role         UserRole   @default(owner)
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  businesses   Business[]
+  resetToken           String?   @db.VarChar(255) @map("reset_token")
+  resetTokenExpiresAt  DateTime? @map("reset_token_expires_at")
+
+  @@map("users")
+}
+
+model Business {
+  id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId           Int
+  name             String           @db.VarChar(255)
+  slug             String           @unique @db.VarChar(255)
+  description      String?
+  phone            String?          @db.VarChar(20)
+  contactEmail     String?          @db.VarChar(255)
+  websiteUrl       String?          @db.VarChar(255)
+  isActive         Boolean          @default(true)
+  approvalStatus   ApprovalStatus   @default(pending)
+  rejectionReason  String?
+  createdAt        DateTime         @default(now())
+  user             User             @relation(fields: [userId], references: [id])
+  availabilityRules AvailabilityRule[]
+  bookingForms     BookingForm[]
+  bookings         Booking[]
+
+  @@map("businesses")
+}
+
+model AvailabilityRule {
+  id                  Int      @id @default(autoincrement())
+  businessId          String   @db.Uuid
+  dayOfWeek           Int      @db.SmallInt
+  startTime           String   @db.VarChar(5)
+  endTime             String   @db.VarChar(5)
+  breakStart          String?  @db.VarChar(5)
+  breakEnd            String?  @db.VarChar(5)
+  slotDurationMinutes Int      @db.SmallInt
+  isAvailable         Boolean  @default(true)
+  updatedAt           DateTime @default(now())
+  business            Business @relation(fields: [businessId], references: [id])
+
+  @@map("availability_rules")
+}
+
+model BookingForm {
+  id               Int          @id @default(autoincrement())
+  businessId       String       @db.Uuid
+  title            String       @db.VarChar(255)
+  description      String?
+  bookingWindowDays Int         @default(30) @db.SmallInt
+  isActive         Boolean      @default(true)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @default(now())
+  business         Business     @relation(fields: [businessId], references: [id])
+  formFields       FormField[]
+  bookings         Booking[]
+
+  @@map("booking_forms")
+}
+
+model FormField {
+  id            Int               @id @default(autoincrement())
+  formId        Int
+  label         String            @db.VarChar(255)
+  fieldType     FieldType
+  options       Json?
+  isRequired    Boolean           @default(false)
+  displayOrder  Int               @db.SmallInt
+  createdAt     DateTime          @default(now())
+  form          BookingForm       @relation(fields: [formId], references: [id])
+  fieldValues   BookingFieldValue[]
+
+  @@map("form_fields")
+}
+
+model Booking {
+  id            Int               @id @default(autoincrement())
+  businessId    String            @db.Uuid
+  formId        Int
+  customerName  String            @db.VarChar(255)
+  customerEmail String            @db.VarChar(255)
+  customerPhone String?           @db.VarChar(20)
+  bookingDate   DateTime          @db.Date
+  bookingTime   String            @db.VarChar(5)
+  status        BookingStatus     @default(pending)
+  ownerNotes    String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @default(now())
+  business      Business          @relation(fields: [businessId], references: [id])
+  form          BookingForm       @relation(fields: [formId], references: [id])
+  fieldValues   BookingFieldValue[]
+
+  @@map("bookings")
+}
+
+model BookingFieldValue {
+  id          Int       @id @default(autoincrement())
+  bookingId   Int
+  formFieldId Int
+  value       String?
+  booking     Booking   @relation(fields: [bookingId], references: [id])
+  formField   FormField @relation(fields: [formFieldId], references: [id])
+
+  @@map("booking_field_values")
+}
+
+enum UserRole {
+  owner
+  admin
+
+  @@map("user_role")
+}
+
+enum ApprovalStatus {
+  pending
+  approved
+  rejected
+
+  @@map("approval_status")
+}
+
+enum FieldType {
+  text
+  textarea
+  dropdown
+  checkbox
+  radio
+
+  @@map("field_type")
+}
+
+enum BookingStatus {
+  pending
+  approved
+  rejected
+  cancelled
+
+  @@map("booking_status")
+}
