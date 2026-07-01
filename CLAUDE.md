@@ -75,3 +75,11 @@ Businesses themselves have an `approvalStatus` (`pending`/`approved`/`rejected`)
 - Forgot-password responses are intentionally vague ("if that email exists, we've sent a reset link") to prevent email enumeration — don't reveal whether the email was found.
 - Owner routes under `/owner` must pass through `requireApprovedBusiness` (business `approvalStatus === 'approved'` and `isActive === true`) in addition to `authenticate` — this is a recurring gate, not a per-route check.
 - There is no admin registration route. The single MVP admin user is created via a manual seed script, not through `/auth`.
+
+## Devlog
+
+After completing any feature work (not for trivial fixes/typos), append a dated 
+entry to `docs/DEVLOG.md` summarizing what shipped, in the existing format 
+(Shipped / any blocking fixes / open questions / next up). Add new entries at 
+the top of the file, below the header. Don't ask permission to update this file — 
+just do it as the last step of the session.
