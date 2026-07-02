@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import bcrypt from 'bcryptjs'
+import { Prisma } from '@prisma/client'
 import prisma from '../lib/prisma.js'
 import { sendMail } from '../lib/mailer.js'
 
@@ -48,44 +49,59 @@ router.post('/register', async (req, res) => {
   const passwordHash = await bcrypt.hash(password, 12)
   const slug = await generateUniqueSlug(businessName)
 
-  const business = await prisma.$transaction(async (tx) => {
-    const user = await tx.user.create({
-      data: {
-        name: ownerName,
-        email,
-        passwordHash,
-        role: 'owner',
-      },
-    })
+  let business
+  try {
+    business = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          name: ownerName,
+          email,
+          passwordHash,
+          role: 'owner',
+        },
+      })
 
-    const business = await tx.business.create({
-      data: {
-        userId: user.id,
-        name: businessName,
-        slug,
-        phone: phone || null,
-        description: description || null,
-        websiteUrl: websiteUrl || null,
-      },
-    })
+      const newBusiness = await tx.business.create({
+        data: {
+          userId: user.id,
+          name: businessName,
+          slug,
+          phone: phone || null,
+          description: description || null,
+          websiteUrl: websiteUrl || null,
+        },
+      })
 
-    const form = await tx.bookingForm.create({
-      data: {
-        businessId: business.id,
-        title: 'Booking Form',
-      },
-    })
+      const form = await tx.bookingForm.create({
+        data: {
+          businessId: newBusiness.id,
+          title: 'Booking Form',
+        },
+      })
 
-    await tx.formField.createMany({
-      data: [
-        { formId: form.id, label: 'Name', fieldType: 'text', isRequired: true, displayOrder: 0 },
-        { formId: form.id, label: 'Email', fieldType: 'text', isRequired: true, displayOrder: 1 },
-        { formId: form.id, label: 'Phone', fieldType: 'text', isRequired: true, displayOrder: 2 },
-      ],
-    })
+      await tx.formField.createMany({
+        data: [
+          { formId: form.id, label: 'Name', fieldType: 'text', isRequired: true, displayOrder: 0 },
+          { formId: form.id, label: 'Email', fieldType: 'text', isRequired: true, displayOrder: 1 },
+          { formId: form.id, label: 'Phone', fieldType: 'text', isRequired: true, displayOrder: 2 },
+        ],
+      })
 
-    return business
-  })
+      return newBusiness
+    })
+  } catch (err) {
+    const isEmailConflict =
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === 'P2002' &&
+      err.meta?.modelName === 'User'
+
+    if (isEmailConflict) {
+      return res.status(409).json({ error: 'An account with this email already exists. Please log in instead.' })
+    }
+
+    console.error('Failed to create business registration', err)
+    return res.status(500).json({ error: 'Something went wrong, please try again' })
+  }
 
   // Best-effort notifications — per UC4, failures here must not block the registration response.
   const admins = await prisma.user.findMany({ where: { role: 'admin' }, select: { email: true } })
