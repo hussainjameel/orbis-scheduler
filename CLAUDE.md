@@ -83,3 +83,10 @@ entry to `docs/DEVLOG.md` summarizing what shipped, in the existing format
 (Shipped / any blocking fixes / open questions / next up). Add new entries at 
 the top of the file, below the header. Don't ask permission to update this file — 
 just do it as the last step of the session.
+
+## Prisma error handling
+
+- Using `@prisma/adapter-neon` (driver adapter) — P2002 errors from this adapter 
+  populate `err.meta?.modelName`, not `err.meta?.target` (the latter is undefined 
+  on this adapter, unlike vanilla Prisma). Always check `modelName` when catching 
+  unique-constraint violations.
