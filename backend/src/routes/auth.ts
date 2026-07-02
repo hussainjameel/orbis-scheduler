@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import bcrypt from 'bcryptjs'
+import jwt from 'jsonwebtoken'
 import { Prisma } from '@prisma/client'
 import prisma from '../lib/prisma.js'
 import { sendMail } from '../lib/mailer.js'
@@ -8,6 +9,7 @@ const router = Router()
 
 const EMAIL_RULE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const PASSWORD_RULE = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/
+const INVALID_CREDENTIALS = { error: 'Invalid credentials' }
 
 function slugify(name: string) {
   return name
@@ -124,6 +126,73 @@ router.post('/register', async (req, res) => {
     message: 'Registration submitted. An administrator will review your account shortly.',
     business: { id: business.id, slug: business.slug, approvalStatus: business.approvalStatus },
   })
+})
+
+router.post('/login', async (req, res) => {
+  const { email, password } = req.body ?? {}
+
+  if (!email || !password) {
+    return res.status(400).json({ error: 'email and password are required' })
+  }
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { email },
+      include: { businesses: true },
+    })
+
+    if (!user) {
+      return res.status(401).json(INVALID_CREDENTIALS)
+    }
+
+    const passwordMatches = await bcrypt.compare(password, user.passwordHash)
+    if (!passwordMatches) {
+      return res.status(401).json(INVALID_CREDENTIALS)
+    }
+
+    if (!user.isActive) {
+      return res.status(403).json({ error: 'Your account has been deactivated.' })
+    }
+
+    let business
+    if (user.role === 'owner') {
+      business = user.businesses[0]
+      if (!business) {
+        console.error(`Owner user ${user.id} has no associated business`)
+        return res.status(500).json({ error: 'Something went wrong, please try again' })
+      }
+
+      if (business.approvalStatus === 'pending') {
+        return res.status(403).json({
+          error: 'Your registration is still under review. We will email you once your account is approved.',
+        })
+      }
+      if (business.approvalStatus === 'rejected') {
+        return res.status(403).json({
+          error: 'Your registration was not approved',
+          reason: business.rejectionReason,
+        })
+      }
+      if (!business.isActive) {
+        return res.status(403).json({ error: 'Account suspended' })
+      }
+    }
+
+    const payload =
+      user.role === 'owner'
+        ? { userId: user.id, role: user.role, businessId: business!.id }
+        : { userId: user.id, role: user.role }
+
+    const token = jwt.sign(payload, process.env.JWT_SECRET!, { expiresIn: '24h' })
+
+    res.status(200).json({
+      token,
+      user: { id: user.id, name: user.name, email: user.email, role: user.role },
+    })
+  } catch (err) {
+    console.error('Failed to process login', err)
+    return res.status(500).json({ error: 'Something went wrong, please try again' })
+  }
 })
 
 export default router
