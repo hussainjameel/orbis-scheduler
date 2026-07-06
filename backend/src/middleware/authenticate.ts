@@ -33,7 +33,8 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
   }
 
   try {
-    // Verifies the signature (proves the token came from us and wasn't tampered
+  // Verifies token by splitting it into header/payload/signature and comparing against a signature recomputed using JWT_SECRET. Throws if invalid/expired.
+  // Returns the decoded payload: { userId, role, businessId?, iat, exp }
     const decoded = jwt.verify(token, jwtSecret)
 
     // Signature can be valid while the payload shape is still wrong/unexpected
@@ -50,15 +51,11 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
       user.businessId = decoded.businessId
     }
 
-    // Attach the verified identity to the request so downstream route
-    // handlers (e.g. owner.ts) can trust req.user without re-verifying anything.
+    // Attach the verified identity to the request 
     req.user = user
 
     next() // hand off to the actual route handler
   } catch (err) {
-    // jwt.verify throws (rather than returning an error) on expired, malformed,
-    // or tampered tokens — all land here with the same generic message, so an
-    // attacker can't tell which failure mode they hit.
     console.error(err)
     return res.status(401).json({ error: 'Invalid or expired token' })
   }
