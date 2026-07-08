@@ -10,6 +10,7 @@ const router = Router()
 
 const EMAIL_RULE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const PASSWORD_RULE = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/
+// Shared constant so both "wrong password" and "no such user" return the exact same response.
 const INVALID_CREDENTIALS = { error: 'Invalid credentials' }
 
 function slugify(name: string) {
@@ -20,6 +21,7 @@ function slugify(name: string) {
     .replace(/^-+|-+$/g, '')
 }
 
+// Appends -2, -3, etc. until a free slug is found. Businesses.slug is unique and used in public booking URLs.
 async function generateUniqueSlug(businessName: string) {
   const base = slugify(businessName) || 'business'
   let slug = base
@@ -31,6 +33,12 @@ async function generateUniqueSlug(businessName: string) {
   return slug
 }
 
+// UC4 — Owner registers a new business.
+// Creates User + Business + a default BookingForm in one transaction, so a
+// registered business is immediately bookable (customers can submit against
+// the default Name/Email/Phone form even before the owner customises it).
+// No JWT is issued here — the owner can't log in until an admin approves
+// the business (see /login's pending/rejected/suspended checks below).
 router.post('/register', async (req, res) => {
   const { businessName, ownerName, email, password, phone, description, websiteUrl } = req.body ?? {}
 
@@ -44,6 +52,7 @@ router.post('/register', async (req, res) => {
     return res.status(400).json({ error: 'Password must be at least 8 characters and include letters and numbers' })
   }
 
+  // Pre-check for a fast, clean 409. The transaction's catch block below handles the rare race where two identical emails register at almost the same instant and both pass this check.
   const existingUser = await prisma.user.findUnique({ where: { email } })
   if (existingUser) {
     return res.status(409).json({ error: 'An account with this email already exists. Please log in instead.' })
@@ -54,6 +63,7 @@ router.post('/register', async (req, res) => {
 
   let business
   try {
+    // All four processes succeed together as a transaction or none do, prevents a half-created state (e.g. a User with no matching Business) if something fails partway through.
     business = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
@@ -93,6 +103,8 @@ router.post('/register', async (req, res) => {
       return newBusiness
     })
   } catch (err) {
+    // Catches the race the pre-check above can miss: two near-simultaneous registrations with the same email. 
+    // err.meta.modelName (not .target) is how @prisma/adapter-neon reports which table's unique constraint fired.
     const isEmailConflict =
       err instanceof Prisma.PrismaClientKnownRequestError &&
       err.code === 'P2002' &&
@@ -106,7 +118,8 @@ router.post('/register', async (req, res) => {
     return res.status(500).json({ error: 'Something went wrong, please try again' })
   }
 
-  // Best-effort notifications — per UC4, failures here must not block the registration response.
+  // Best-effort notifications — per UC4, email failures must never block the registration response. 
+  // Each sendMail has its own .catch so one failed email can't fail the others or the request itself.
   const admins = await prisma.user.findMany({ where: { role: 'admin' }, select: { email: true } })
   await Promise.all([
     ...admins.map((admin) =>
@@ -129,6 +142,8 @@ router.post('/register', async (req, res) => {
   })
 })
 
+// UC4/UC15 — Login. Blocks pending/rejected/suspended businesses and
+// deactivated users, then issues a JWT scoped to the user's role.
 router.post('/login', async (req, res) => {
   const { email, password } = req.body ?? {}
 
@@ -142,6 +157,7 @@ router.post('/login', async (req, res) => {
       include: { businesses: true },
     })
 
+    // No user and wrong password return the identical response
     if (!user) {
       return res.status(401).json(INVALID_CREDENTIALS)
     }
@@ -151,12 +167,16 @@ router.post('/login', async (req, res) => {
       return res.status(401).json(INVALID_CREDENTIALS)
     }
 
+    // Checked before the role branch below since it applies to both
+    // admins and owners — admin can deactivate any single login without
+    // touching a whole business's status.
     if (!user.isActive) {
       return res.status(403).json({ error: 'Your account has been deactivated.' })
     }
 
     let business
     if (user.role === 'owner') {
+      // Registration always creates exactly one business per owner. If this is ever missing, the registration invariant broke — treat as a server error, not a normal user-facing case.
       business = user.businesses[0]
       if (!business) {
         console.error(`Owner user ${user.id} has no associated business`)
@@ -179,6 +199,8 @@ router.post('/login', async (req, res) => {
       }
     }
 
+    // Owner tokens carry businessId so tenant-isolation checks (see
+    // owner.ts) can trust it without a DB lookup; admin tokens don't need one.
     const payload =
       user.role === 'owner'
         ? { userId: user.id, role: user.role, businessId: business!.id }
@@ -196,6 +218,10 @@ router.post('/login', async (req, res) => {
   }
 })
 
+// Sends a reset link if the email exists. Always returns the same response
+// either way, and never awaits the email send — both are deliberate so
+// neither the response content nor its timing reveals whether an account
+// exists (account enumeration prevention).
 router.post('/forgot-password', async (req, res) => {
   const { email } = req.body ?? {}
 
@@ -208,7 +234,7 @@ router.post('/forgot-password', async (req, res) => {
 
     if (user) {
       const resetToken = crypto.randomBytes(32).toString('hex')
-      const resetTokenExpiresAt = new Date(Date.now() + 60 * 60 * 1000)
+      const resetTokenExpiresAt = new Date(Date.now() + 60 * 60 * 1000) // 1 hour
 
       await prisma.user.update({
         where: { id: user.id },
@@ -216,6 +242,7 @@ router.post('/forgot-password', async (req, res) => {
       })
 
       const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`
+      // Not awaited — see comment above the route.
       sendMail({
         to: user.email,
         subject: 'Reset your Orbis Scheduler password',
@@ -230,6 +257,8 @@ router.post('/forgot-password', async (req, res) => {
   }
 })
 
+// Consumes a reset token: validates it, updates the password, and clears
+// the token fields in one call so the same link can never be used twice.
 router.post('/reset-password', async (req, res) => {
   const { token, newPassword } = req.body ?? {}
 
@@ -244,12 +273,16 @@ router.post('/reset-password', async (req, res) => {
   try {
     const user = await prisma.user.findFirst({ where: { resetToken: token } })
 
+    // No match, missing expiry, or expired — all collapse to the same
+    // generic message so a bad guess can't reveal which case it was.
     if (!user || !user.resetTokenExpiresAt || user.resetTokenExpiresAt < new Date()) {
       return res.status(400).json({ error: 'This reset link is invalid or has expired.' })
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 12)
 
+    // Single update: changing the password and invalidating the token happen atomically,
+    // so there's no window where the old token still works after a successful reset.
     await prisma.user.update({
       where: { id: user.id },
       data: { passwordHash, resetToken: null, resetTokenExpiresAt: null },
