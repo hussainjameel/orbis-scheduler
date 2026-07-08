@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { Prisma } from '@prisma/client'
@@ -192,6 +193,72 @@ router.post('/login', async (req, res) => {
   } catch (err) {
     console.error('Failed to process login', err)
     return res.status(500).json({ error: 'Something went wrong, please try again' })
+  }
+})
+
+router.post('/forgot-password', async (req, res) => {
+  const { email } = req.body ?? {}
+
+  if (!email) {
+    return res.status(400).json({ error: 'email is required' })
+  }
+
+  try {
+    const user = await prisma.user.findUnique({ where: { email } })
+
+    if (user) {
+      const resetToken = crypto.randomBytes(32).toString('hex')
+      const resetTokenExpiresAt = new Date(Date.now() + 60 * 60 * 1000)
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { resetToken, resetTokenExpiresAt },
+      })
+
+      const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`
+      sendMail({
+        to: user.email,
+        subject: 'Reset your Orbis Scheduler password',
+        text: `We received a request to reset your password. This link expires in 1 hour:\n\n${resetLink}\n\nIf you didn't request this, you can ignore this email.`,
+      }).catch((err) => console.error('Failed to send password reset email', err))
+    }
+
+    res.status(200).json({ message: "If that email exists, we've sent a reset link." })
+  } catch (err) {
+    console.error('Failed to process forgot-password request', err)
+    res.status(500).json({ error: 'Something went wrong, please try again' })
+  }
+})
+
+router.post('/reset-password', async (req, res) => {
+  const { token, newPassword } = req.body ?? {}
+
+  if (!token || !newPassword) {
+    return res.status(400).json({ error: 'token and newPassword are required' })
+  }
+
+  if (!PASSWORD_RULE.test(newPassword)) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters and include letters and numbers' })
+  }
+
+  try {
+    const user = await prisma.user.findFirst({ where: { resetToken: token } })
+
+    if (!user || !user.resetTokenExpiresAt || user.resetTokenExpiresAt < new Date()) {
+      return res.status(400).json({ error: 'This reset link is invalid or has expired.' })
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 12)
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash, resetToken: null, resetTokenExpiresAt: null },
+    })
+
+    res.status(200).json({ message: 'Password updated successfully. You can now log in.' })
+  } catch (err) {
+    console.error('Failed to process reset-password request', err)
+    res.status(500).json({ error: 'Something went wrong, please try again' })
   }
 })
 
