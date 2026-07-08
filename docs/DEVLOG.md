@@ -1,5 +1,52 @@
 # Orbis Scheduler — Development Log
 
+## 2026-07-02 — Forgot/reset-password + SMTP setup
+
+**Shipped**
+- SMTP configured via Mailtrap Sandbox (Email Testing product) — real email 
+  delivery confirmed working end-to-end for register's admin/owner 
+  notifications, which were previously no-op'ing since SMTP wasn't set up.
+- `POST /auth/forgot-password` — generates a random token via 
+  `crypto.randomBytes(32)`, stores it + a 1-hour expiry on the user's row, 
+  sends a best-effort reset email (unawaited, to avoid a timing side-channel 
+  between real/nonexistent emails), and always returns an identical 
+  enumeration-safe response regardless of whether the email exists.
+- `POST /auth/reset-password` — validates the token against `resetToken` + 
+  expiry, rejects invalid/expired tokens with a generic message, and updates 
+  the password hash while clearing the token fields in a single 
+  `prisma.user.update` call (single-use guarantee).
+- `auth.ts` is now feature-complete: register, login, forgot-password, 
+  reset-password — all four endpoints tested against a live dev DB.
+
+**Verified (Postman, live dev DB)**
+- Identical response for real vs. nonexistent email (enumeration-safe, 
+  confirmed byte-identical).
+- Reset token correctly written to DB (64-char hex, ~1h expiry).
+- Old password fails post-reset, new password succeeds.
+- Token reuse rejected after consumption (single-use confirmed).
+- Expired token rejected; re-verified in isolation by pushing the same 
+  token's expiry forward and confirming it then succeeds — proving the 
+  rejection was specifically the expiry check, not a false positive.
+
+**Dev tooling**
+- Added local-only cleanup scripts (`scripts/listOwners.ts`, 
+  `scripts/deleteTestUsers.ts`) for wiping test owner accounts + their 
+  cascading Business/BookingForm/FormField rows between testing sessions. 
+  `scripts/` is gitignored — local machine only, not pushed. Run via 
+  `npm run list-owners` / `npm run cleanup-owners`.
+- Cleaned up 5 test owner accounts (Joe, Joey, Jimmy, AFA, FAF) created 
+  during today's and prior sessions' Postman testing.
+
+**Open questions / flagged for later**
+- Domain + real SMTP provider (Resend/SendGrid) deferred to deployment week — 
+  Mailtrap Sandbox is sufficient through the rest of development.
+
+**Next up:** UC11 (admin approve/reject business) — currently the only way 
+to approve a pending business is manually via Prisma Studio. Or 
+`GET`/`PATCH /owner/business` for owner-facing business management.
+
+---
+
 ## 2026-07-07 — Auth middleware + first owner route
 
 **Shipped**
