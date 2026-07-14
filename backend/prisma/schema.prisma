@@ -49,15 +49,16 @@ model AvailabilityRule {
   id                  Int      @id @default(autoincrement())
   businessId          String   @db.Uuid
   dayOfWeek           Int      @db.SmallInt
-  startTime           String   @db.VarChar(5)
-  endTime             String   @db.VarChar(5)
+  startTime           String?  @db.VarChar(5)
+  endTime             String?  @db.VarChar(5)
   breakStart          String?  @db.VarChar(5)
   breakEnd            String?  @db.VarChar(5)
-  slotDurationMinutes Int      @db.SmallInt
+  slotDurationMinutes Int?     @db.SmallInt
   isAvailable         Boolean  @default(true)
   updatedAt           DateTime @default(now())
   business            Business @relation(fields: [businessId], references: [id])
 
+  @@unique([businessId, dayOfWeek])
   @@map("availability_rules")
 }
 

@@ -55,13 +55,14 @@ CREATE TABLE "availability_rules" (
   "id" SERIAL PRIMARY KEY,
   "business_id" uuid NOT NULL,
   "day_of_week" smallint NOT NULL,
-  "start_time" time NOT NULL,
-  "end_time" time NOT NULL,
+  "start_time" time,
+  "end_time" time,
   "break_start" time,
   "break_end" time,
-  "slot_duration_minutes" smallint NOT NULL,
+  "slot_duration_minutes" smallint,
   "is_available" boolean NOT NULL DEFAULT true,
-  "updated_at" timestamp NOT NULL DEFAULT (now())
+  "updated_at" timestamp NOT NULL DEFAULT (now()),
+  UNIQUE ("business_id", "day_of_week")
 );
 
 CREATE TABLE "booking_forms" (
@@ -150,7 +151,11 @@ COMMENT ON COLUMN "businesses"."rejection_reason" IS 'Admin fills on rejection';
 
 COMMENT ON COLUMN "availability_rules"."day_of_week" IS '0 = Monday, 6 = Sunday';
 
-COMMENT ON COLUMN "availability_rules"."slot_duration_minutes" IS 'e.g. 30 or 60';
+COMMENT ON COLUMN "availability_rules"."slot_duration_minutes" IS 'e.g. 30 or 60; null when is_available is false';
+
+COMMENT ON COLUMN "availability_rules"."start_time" IS 'null when is_available is false';
+
+COMMENT ON COLUMN "availability_rules"."end_time" IS 'null when is_available is false';
 
 COMMENT ON COLUMN "booking_forms"."title" IS 'e.g. Book a Consultation';
 

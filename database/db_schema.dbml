@@ -70,16 +70,17 @@ Table availability_rules {
   id                    serial    [pk, increment]
   business_id           uuid      [not null, ref: > businesses.id]
   day_of_week           smallint  [not null, note: "0 = Monday, 6 = Sunday"]
-  start_time            time      [not null]
-  end_time              time      [not null]
+  start_time            time      [null, note: "null when is_available is false"]
+  end_time              time      [null, note: "null when is_available is false"]
   break_start           time      [null]
   break_end             time      [null]
-  slot_duration_minutes smallint  [not null, note: "e.g. 30 or 60"]
+  slot_duration_minutes smallint  [null, note: "e.g. 30 or 60; null when is_available is false"]
   is_available          boolean   [not null, default: true]
   updated_at            timestamp [not null, default: `now()`]
 
   indexes {
     business_id [name: "idx_availability_rules_business_id"]
+    (business_id, day_of_week) [unique, name: "availability_rules_business_id_day_of_week_key"]
   }
 }
 
