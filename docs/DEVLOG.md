@@ -1,5 +1,7 @@
 # Orbis Scheduler — Development Log
 
+##Today Updates pending
+
 ## 2026-07-14 — Weekly availability management (`GET`/`PUT /owner/availability`)
 
 **Shipped**
