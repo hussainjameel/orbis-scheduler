@@ -1,4 +1,6 @@
 import { Router } from 'express'
+import { Prisma } from '@prisma/client'
+import type { FieldType } from '@prisma/client'
 import prisma from '../lib/prisma.js'
 import { authenticate } from '../middleware/authenticate.js'
 import { requireApprovedBusiness } from '../middleware/requireApprovedBusiness.js'
@@ -13,6 +15,9 @@ function parseTimeToMinutes(time: string): number {
   const [hours, minutes] = time.split(':').map(Number)
   return hours! * 60 + minutes!
 }
+
+const VALID_FIELD_TYPES = ['text', 'textarea', 'dropdown', 'checkbox', 'radio']
+const OPTIONS_REQUIRED_TYPES = ['dropdown', 'checkbox', 'radio']
 
 // GET /business
 router.get('/business', authenticate, requireApprovedBusiness, async (req, res) => {
@@ -313,6 +318,226 @@ router.put('/form', authenticate, requireApprovedBusiness, async (req, res) => {
     res.status(200).json({ message: 'Form updated successfully.' })
   } catch (err) {
     console.error('Failed to update booking form', err)
+    res.status(500).json({ error: 'Something went wrong, please try again' })
+  }
+})
+
+// POST /form/fields
+router.post('/form/fields', authenticate, requireApprovedBusiness, async (req, res) => {
+  const businessId = req.user?.businessId as string
+  const { label, fieldType, isRequired, options } = req.body ?? {}
+
+  if (typeof label !== 'string' || label.trim().length === 0) {
+    return res.status(400).json({ error: 'label is required' })
+  }
+  if (typeof fieldType !== 'string' || !VALID_FIELD_TYPES.includes(fieldType)) {
+    return res.status(400).json({ error: 'fieldType must be one of: text, textarea, dropdown, checkbox, radio' })
+  }
+
+  let isRequiredValue = false
+  if (isRequired !== undefined) {
+    if (typeof isRequired !== 'boolean') {
+      return res.status(400).json({ error: 'isRequired must be true or false' })
+    }
+    isRequiredValue = isRequired
+  }
+
+  const needsOptions = OPTIONS_REQUIRED_TYPES.includes(fieldType)
+  if (needsOptions) {
+    if (!Array.isArray(options) || options.length === 0 || !options.every((o: unknown) => typeof o === 'string')) {
+      return res.status(400).json({ error: 'options is required and must be a non-empty array of strings for dropdown, checkbox, and radio fields' })
+    }
+  } else if (options !== undefined && options !== null) {
+    return res.status(400).json({ error: 'options must be omitted for text and textarea fields' })
+  }
+
+  try {
+    const form = await prisma.bookingForm.findFirst({ where: { businessId }, orderBy: { createdAt: 'asc' } })
+    if (!form) {
+      return res.status(404).json({ error: 'Booking form not found.' })
+    }
+
+    // New fields always append to the end of the form.
+    const maxOrder = await prisma.formField.aggregate({
+      where: { formId: form.id },
+      _max: { displayOrder: true },
+    })
+    const displayOrder = (maxOrder._max.displayOrder ?? -1) + 1
+
+    const field = await prisma.formField.create({
+      data: {
+        formId: form.id,
+        label,
+        // Already validated against VALID_FIELD_TYPES above; cast narrows the plain
+        // string from req.body to Prisma's generated FieldType literal union.
+        fieldType: fieldType as FieldType,
+        isRequired: isRequiredValue,
+        // Never trust a client-supplied isProtected — every created field starts unprotected.
+        isProtected: false,
+        displayOrder,
+        options: needsOptions ? options : null,
+      },
+      select: { id: true, label: true, fieldType: true, isRequired: true, displayOrder: true, options: true },
+    })
+
+    res.status(201).json(field)
+  } catch (err) {
+    console.error('Failed to create form field', err)
+    res.status(500).json({ error: 'Something went wrong, please try again' })
+  }
+})
+
+// PATCH /form/fields/:id
+router.patch('/form/fields/:id', authenticate, requireApprovedBusiness, async (req, res) => {
+  const businessId = req.user?.businessId as string
+  const fieldId = Number(req.params.id as string)
+  const { label, fieldType, isRequired, options } = req.body ?? {}
+
+  if (!Number.isInteger(fieldId)) {
+    return res.status(404).json({ error: 'Field not found.' })
+  }
+
+  try {
+    // Ownership is enforced via the relation join — a field id alone is never enough.
+    const field = await prisma.formField.findFirst({ where: { id: fieldId, form: { businessId } } })
+
+    if (!field) {
+      return res.status(404).json({ error: 'Field not found.' })
+    }
+    if (field.isProtected) {
+      return res.status(403).json({ error: 'This field is protected and cannot be edited.' })
+    }
+    if (fieldType !== undefined) {
+      return res.status(400).json({ error: 'fieldType cannot be changed after creation' })
+    }
+
+    const data: Prisma.FormFieldUpdateInput = {}
+
+    if (label !== undefined) {
+      if (typeof label !== 'string' || label.trim().length === 0) {
+        return res.status(400).json({ error: 'label must be a non-empty string' })
+      }
+      data.label = label
+    }
+
+    if (isRequired !== undefined) {
+      if (typeof isRequired !== 'boolean') {
+        return res.status(400).json({ error: 'isRequired must be true or false' })
+      }
+      data.isRequired = isRequired
+    }
+
+    if (options !== undefined) {
+      // Required-ness is checked against the field's existing (immutable) type, not a submitted one.
+      const needsOptions = OPTIONS_REQUIRED_TYPES.includes(field.fieldType)
+      if (needsOptions) {
+        if (!Array.isArray(options) || options.length === 0 || !options.every((o: unknown) => typeof o === 'string')) {
+          return res.status(400).json({ error: 'options must be a non-empty array of strings for dropdown, checkbox, and radio fields' })
+        }
+        data.options = options
+      } else if (options !== null) {
+        return res.status(400).json({ error: 'options must be omitted or null for text and textarea fields' })
+      } else {
+        // Nullable Json columns need Prisma's JsonNull sentinel, not a plain `null`,
+        // to actually clear the column on update.
+        data.options = Prisma.JsonNull
+      }
+    }
+
+    await prisma.formField.update({ where: { id: field.id }, data })
+
+    res.status(200).json({ message: 'Field updated successfully.' })
+  } catch (err) {
+    console.error('Failed to update form field', err)
+    res.status(500).json({ error: 'Something went wrong, please try again' })
+  }
+})
+
+// DELETE /form/fields/:id
+router.delete('/form/fields/:id', authenticate, requireApprovedBusiness, async (req, res) => {
+  const businessId = req.user?.businessId as string
+  const fieldId = Number(req.params.id as string)
+
+  if (!Number.isInteger(fieldId)) {
+    return res.status(404).json({ error: 'Field not found.' })
+  }
+
+  try {
+    const field = await prisma.formField.findFirst({ where: { id: fieldId, form: { businessId } } })
+
+    if (!field) {
+      return res.status(404).json({ error: 'Field not found.' })
+    }
+    if (field.isProtected) {
+      return res.status(403).json({ error: 'This field is protected and cannot be deleted.' })
+    }
+
+    // booking_field_values.formFieldId -> form_fields.id is ON DELETE RESTRICT,
+    // so any historical answers for this field must go first, in the same transaction.
+    await prisma.$transaction(async (tx) => {
+      await tx.bookingFieldValue.deleteMany({ where: { formFieldId: field.id } })
+      await tx.formField.delete({ where: { id: field.id } })
+    })
+
+    res.status(200).json({ message: 'Field deleted successfully.' })
+  } catch (err) {
+    console.error('Failed to delete form field', err)
+    res.status(500).json({ error: 'Something went wrong, please try again' })
+  }
+})
+
+// PUT /form/fields/reorder
+router.put('/form/fields/reorder', authenticate, requireApprovedBusiness, async (req, res) => {
+  const businessId = req.user?.businessId as string
+  const updates = req.body
+
+  if (!Array.isArray(updates) || updates.length === 0) {
+    return res.status(400).json({ error: 'An array of { id, displayOrder } pairs is required' })
+  }
+
+  const seenIds = new Set<number>()
+  for (const update of updates) {
+    if (typeof update?.id !== 'number' || !Number.isInteger(update.id)) {
+      return res.status(400).json({ error: 'Each entry must have an integer id' })
+    }
+    if (typeof update.displayOrder !== 'number' || !Number.isInteger(update.displayOrder)) {
+      return res.status(400).json({ error: 'Each entry must have an integer displayOrder' })
+    }
+    if (seenIds.has(update.id)) {
+      return res.status(400).json({ error: `Duplicate id: ${update.id}` })
+    }
+    seenIds.add(update.id)
+  }
+
+  try {
+    const form = await prisma.bookingForm.findFirst({ where: { businessId }, orderBy: { createdAt: 'asc' } })
+    if (!form) {
+      return res.status(404).json({ error: 'Booking form not found.' })
+    }
+
+    const existingFields = await prisma.formField.findMany({ where: { formId: form.id }, select: { id: true } })
+    const existingIds = new Set(existingFields.map((f) => f.id))
+
+    // Unrecognized/other-business ids are checked first (specific message), then completeness
+    // (only reachable once every submitted id is already confirmed valid).
+    for (const id of seenIds) {
+      if (!existingIds.has(id)) {
+        return res.status(400).json({ error: `Field ${id} does not belong to this form` })
+      }
+    }
+    if (seenIds.size !== existingIds.size) {
+      return res.status(400).json({ error: 'The reorder list must include every field on this form' })
+    }
+
+    await prisma.$transaction(async (tx) => {
+      for (const update of updates) {
+        await tx.formField.update({ where: { id: update.id }, data: { displayOrder: update.displayOrder } })
+      }
+    })
+
+    res.status(200).json({ message: 'Fields reordered successfully.' })
+  } catch (err) {
+    console.error('Failed to reorder fields', err)
     res.status(500).json({ error: 'Something went wrong, please try again' })
   }
 })
