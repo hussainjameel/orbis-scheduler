@@ -106,6 +106,7 @@ Table form_fields {
   field_type    field_type    [not null]
   options       jsonb         [null, note: "Array of options for dropdown/radio/checkbox"]
   is_required   boolean       [not null, default: false]
+  is_protected  boolean       [not null, default: false, note: "System field (Name/Email) — can't be deleted/edited later"]
   display_order smallint      [not null, note: "Controls render order on the form"]
   created_at    timestamp     [not null, default: `now()`]
 

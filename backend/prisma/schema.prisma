@@ -85,6 +85,7 @@ model FormField {
   fieldType     FieldType
   options       Json?
   isRequired    Boolean           @default(false)
+  isProtected   Boolean           @default(false)
   displayOrder  Int               @db.SmallInt
   createdAt     DateTime          @default(now())
   form          BookingForm       @relation(fields: [formId], references: [id])

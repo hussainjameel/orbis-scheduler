@@ -228,4 +228,93 @@ router.put('/availability', authenticate, requireApprovedBusiness, async (req, r
   }
 })
 
+// GET /form
+router.get('/form', authenticate, requireApprovedBusiness, async (req, res) => {
+  const businessId = req.user?.businessId as string
+
+  try {
+    const form = await prisma.bookingForm.findFirst({
+      where: { businessId },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        bookingWindowDays: true,
+        isActive: true,
+        formFields: {
+          orderBy: { displayOrder: 'asc' },
+          select: {
+            id: true,
+            label: true,
+            fieldType: true,
+            isRequired: true,
+            isProtected: true,
+            displayOrder: true,
+            options: true,
+          },
+        },
+      },
+    })
+
+    if (!form) {
+      return res.status(404).json({ error: 'Booking form not found.' })
+    }
+
+    res.status(200).json({
+      id: form.id,
+      title: form.title,
+      description: form.description,
+      bookingWindowDays: form.bookingWindowDays,
+      isActive: form.isActive,
+      fields: form.formFields.map((field) => ({
+        id: field.id,
+        label: field.label,
+        fieldType: field.fieldType,
+        isRequired: field.isRequired,
+        displayOrder: field.displayOrder,
+        options: field.options,
+        isProtected: field.isProtected,
+      })),
+    })
+  } catch (err) {
+    console.error('Failed to fetch booking form', err)
+    res.status(500).json({ error: 'Something went wrong, please try again' })
+  }
+})
+
+// PUT /form
+router.put('/form', authenticate, requireApprovedBusiness, async (req, res) => {
+  const businessId = req.user?.businessId as string
+  const { title, description, bookingWindowDays } = req.body ?? {}
+
+  if (typeof title !== 'string' || title.trim().length === 0) {
+    return res.status(400).json({ error: 'title is required' })
+  }
+  if (bookingWindowDays !== undefined && (!Number.isInteger(bookingWindowDays) || bookingWindowDays <= 0)) {
+    return res.status(400).json({ error: 'bookingWindowDays must be a positive integer' })
+  }
+
+  try {
+    const form = await prisma.bookingForm.findFirst({ where: { businessId }, orderBy: { createdAt: 'asc' } })
+
+    if (!form) {
+      return res.status(404).json({ error: 'Booking form not found.' })
+    }
+
+    const data = {
+      title,
+      ...(description !== undefined && { description }),
+      ...(bookingWindowDays !== undefined && { bookingWindowDays }),
+    }
+
+    await prisma.bookingForm.update({ where: { id: form.id }, data })
+
+    res.status(200).json({ message: 'Form updated successfully.' })
+  } catch (err) {
+    console.error('Failed to update booking form', err)
+    res.status(500).json({ error: 'Something went wrong, please try again' })
+  }
+})
+
 export default router

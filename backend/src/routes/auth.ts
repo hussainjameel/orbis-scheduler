@@ -94,8 +94,8 @@ router.post('/register', async (req, res) => {
 
       await tx.formField.createMany({
         data: [
-          { formId: form.id, label: 'Name', fieldType: 'text', isRequired: true, displayOrder: 0 },
-          { formId: form.id, label: 'Email', fieldType: 'text', isRequired: true, displayOrder: 1 },
+          { formId: form.id, label: 'Name', fieldType: 'text', isRequired: true, isProtected: true, displayOrder: 0 },
+          { formId: form.id, label: 'Email', fieldType: 'text', isRequired: true, isProtected: true, displayOrder: 1 },
           { formId: form.id, label: 'Phone', fieldType: 'text', isRequired: true, displayOrder: 2 },
         ],
       })

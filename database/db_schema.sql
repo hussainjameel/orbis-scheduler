@@ -83,6 +83,7 @@ CREATE TABLE "form_fields" (
   "field_type" field_type NOT NULL,
   "options" jsonb,
   "is_required" boolean NOT NULL DEFAULT false,
+  "is_protected" boolean NOT NULL DEFAULT false,
   "display_order" smallint NOT NULL,
   "created_at" timestamp NOT NULL DEFAULT (now())
 );
@@ -166,6 +167,8 @@ COMMENT ON COLUMN "booking_forms"."is_active" IS 'Only one active form per busin
 COMMENT ON COLUMN "form_fields"."label" IS 'e.g. Choose your suburb';
 
 COMMENT ON COLUMN "form_fields"."options" IS 'Array of options for dropdown/radio/checkbox';
+
+COMMENT ON COLUMN "form_fields"."is_protected" IS 'System field (Name/Email) — can''t be deleted/edited later';
 
 COMMENT ON COLUMN "form_fields"."display_order" IS 'Controls render order on the form';
 
