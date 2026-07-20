@@ -1,5 +1,59 @@
 # Orbis Scheduler — Development Log
 
+## 2026-07-20 — `POST /public/bookings` — booking submission (highest-risk endpoint)
+
+**Shipped**
+- Migration `bookings_active_slot_unique`: a Postgres **partial (filtered) unique index** on `bookings ("businessId", "bookingDate", "bookingTime") WHERE "status" IN ('pending', 'approved')` — hand-authored raw SQL, **not represented in `schema.prisma` at all**, since Prisma's `@@unique`/`@@index` have no `WHERE`-clause syntax (confirmed absent from every Prisma schema version I could check, and from this project's 4 prior migrations). This was a decision surfaced to and confirmed by the user before writing any code: it's the only thing that actually closes the double-booking race window — the optimistic `generateSlots()` recheck alone cannot, since two near-simultaneous requests can both pass it before either writes.
+- `POST /public/bookings` (`backend/src/routes/public.ts`): validates required fields, the business/form 404 gate (reusing the exact pattern from the other public routes), the `bookingDate` window (`[today, today + bookingWindowDays]` — a past date is treated as also outside the window, a decision made explicit since the spec's "day 0" phrasing didn't cover it), re-runs `generateSlots()` (imported from `lib/slots.ts`, not duplicated) and requires the requested `bookingTime` to come back available or the whole thing collapses to `409` per spec, then validates `fieldValues` in the spec's literal listed order (required-field presence → dropdown/checkbox/radio options match → foreign `formFieldId` rejection). On success, creates the `Booking` + `BookingFieldValue` rows in one transaction; a `P2002` from the partial index there is caught and turned into the same `409` message the optimistic check gives, so a genuine race and an already-taken slot are indistinguishable to the client. Best-effort confirmation + owner-notification emails follow the same `sendMail(...).catch(...)` pattern as `auth.ts`/`admin.ts`.
+
+**Verified (curl + a small Node concurrency script, live dev DB)** — prioritized the actual concurrency test above everything else, per your instruction:
+- **The real race condition, three independent ways**: (1) fired two genuinely simultaneous `POST` requests (`Promise.all` over `fetch`, not sequential) at the same clean slot, three separate times against three different slots — every single run came back exactly one `201` + one `409`, confirmed by re-querying the DB that exactly one `Booking` row existed afterward despite two concurrent write attempts. (2) To rule out the optimistic pre-check alone being what saved us (timing alone can't prove *which* code path fired), wrote a second script that calls `prisma.booking.create()` directly, twice, concurrently, bypassing the application's pre-check entirely — got exactly one success and one `P2002` rejection, which is unambiguous, direct proof the DB constraint itself is real and enforced, independent of app logic. (3) Confirmed the two 409 *paths* are genuinely independent: a **sequential** (non-concurrent) request against an already-committed booking returned `409` with no possible P2002 involvement (the pre-check alone caught it, since nothing else was in flight) — so both routes to `409` (optimistic pre-check *and* DB constraint) were each proven to work on their own, not just as a pair.
+- All required-field-missing combinations (6 fields) → `400`.
+- `bookingDate` one day before today, and one day past `bookingWindowDays` → both `400`, confirming the explicit past-date decision.
+- Nonexistent/pending/rejected/suspended business → all four `404` (reused the mutate-status technique from prior sessions).
+- `formId` belonging to a different business, and a `formId` that doesn't exist at all → both `404`.
+- Missing a required field's value, an invalid dropdown option, and a `fieldValues` entry naming a field from a *different* business's form → each its own specific `400` message, the last one confirmed genuinely rejected (not silently dropped/ignored).
+- A fully valid submission → `201` with the exact spec response shape; inspected the DB directly and confirmed the `Booking` row and all 4 `BookingFieldValue` rows (including the built-in Name/Email/Phone answers) were created correctly.
+- A hit-a-snag but useful finding on the concurrency runs: with several successful bookings firing emails in quick succession, Mailtrap's sandbox rate limit was hit for real (not simulated) — every one of those failures was caught and logged without blocking a single HTTP response (still `201` every time). That's arguably a better confirmation of the spec's "email failures must never block the response" requirement than a clean send would have been.
+
+**Blocking fixes**
+- A stale `tsx`/nodemon process from an earlier session was still holding port 5000 (serving code from before this endpoint existed), causing `Cannot POST /public/bookings` 404s at the start of verification even though the code was correct. Diagnosed via `netstat`, killed the PID directly, restarted cleanly. Also proactively killed a similarly-orphaned process after this session's `TaskStop` didn't fully terminate nodemon's spawned child.
+
+**Open questions**
+- Couldn't get a clean, unambiguous confirmation of both notification emails landing in Mailtrap — the sandbox's rate/quota limit was still blocking sends even after a 20s cooldown, apparently exhausted for the day by this session's test volume (not just a per-second burst). The error-handling behavior itself (failures caught, logged, never block the response) was thoroughly confirmed instead; an actual visual Mailtrap check is still worth doing manually at some point when the quota resets.
+- The partial unique index exists only as raw SQL, invisible to `schema.prisma` — flagged during planning as a new kind of drift for this codebase. Not a problem today, but worth remembering if `prisma db pull`/introspection is ever run against this database.
+
+**Next up**
+- Owner-facing booking management (`GET`/`PATCH /owner/bookings` — approve/reject, matching the `status` transitions this endpoint only ever creates as `pending`).
+
+## 2026-07-20 — `GET /public/slots` — slot calculation
+
+**Shipped**
+- `backend/src/lib/slots.ts` (new): `generateSlots()`, the reusable core — steps through `startTime`→`endTime` in `slotDurationMinutes` steps (only including a slot that fully fits before `endTime`), excludes any slot overlapping `breakStart`–`breakEnd` at all via a standard half-open-interval test (so even a partial overlap excludes it), then marks a slot `available: false` if it's in `bookedTimes` or its real datetime is `<= now`. Exported so booking submission (not built yet) can reuse the exact same logic rather than duplicating it.
+- `GET /public/slots` (`backend/src/routes/public.ts`, query params `businessId`, `date`): validates both are present (`400`), validates `date` is `YYYY-MM-DD` *and* a real calendar date via a construct-then-round-trip check against `Date.UTC` (catches `2026-02-30` specifically, not just wrong shape), reuses the exact same 404-collapsing gate as `GET /businesses/:businessId` (not-found/not-approved/inactive → identical `404 "Business not found."`), converts the date's day-of-week from JS's `0=Sunday..6=Saturday` to this project's `0=Monday..6=Sunday` convention via `(jsDay + 6) % 7`, looks up the matching `AvailabilityRule` by the `businessId_dayOfWeek` compound unique, returns `200 { slots: [] }` for a closed/unconfigured day (not an error), otherwise queries `pending`/`approved` `Booking` rows for that exact date and feeds everything into `generateSlots()`.
+- **Decision surfaced and confirmed with you before writing code**: a fully-past `date` gets no special-case branch — the "already passed" check in `generateSlots()` compares every slot's datetime against `now` unconditionally (not gated on `date === today`), so a past date's slots all naturally come out `available: false` while still returning the full list, rather than an empty array or a `400`.
+
+**Verified (curl, live dev DB)** — one test business with a deliberately layered availability config: Monday `01:00–06:00` with a break `03:15–03:45` (chosen off the 30-min slot grid specifically to test *partial*, not just full, break overlap) for the break/booking/passed-time tests, Tuesday `09:00–17:00` and Wednesday `09:00–16:45` (otherwise identical) for the slot-fitting boundary comparison, Thursday explicitly closed, Friday–Sunday closed:
+- Missing `businessId`, missing `date`, both missing → `400` in all three.
+- Four malformed dates (`2026-13-01`, `2026-02-30`, `15-07-2026`, `2026-7-5`) → `400` in every case, confirming the round-trip check catches the invalid-calendar-date case specifically, not just the two regex-shape cases.
+- 404 equivalence across nonexistent/pending/rejected/suspended → diffed all four response bodies, byte-identical.
+- No `AvailabilityRule` row at all (queried before ever calling `PUT /owner/availability`), and a day explicitly `isAvailable: false` → both `200 { slots: [] }`.
+- Break overlap: with `breakStart`/`breakEnd` off the slot grid, the two slots that only *partially* touch the break (`03:00`–`03:30` and `03:30`–`04:00`) were completely absent from the response — confirmed exclusion, not just an `available: false` marking.
+- Booking collision: created one `pending`, one `approved`, one `rejected`, and one `cancelled` booking at four different times on the same date — `pending`/`approved` slots came back `available: false` (still present in the list), `rejected`/`cancelled` slots stayed `available: true`, exactly matching "these two statuses hold the slot, the other two free it."
+- Today's passed-time marking: read the four survived-the-break-filter slots before the current server time and the four after in the same response — all four earlier slots `available: false`, all four later ones `available: true`.
+- Slot-fitting boundary: `09:00–17:00` included `16:30` as the last slot (fits exactly to `17:00`); `09:00–16:45` stopped at `16:00`, correctly excluding `16:30` (which would end at `17:00`, past the `16:45` close) — same slot grid, only the closing time differed, isolating exactly the boundary condition being tested.
+- Fully-past date: requested a date on a previous occurrence of the same configured weekday — all slots returned (same set, same break exclusions as "today"), every one `available: false`, including the ones that would've read as "future" had the date been today — directly confirms the generalized (non-special-cased) past-date decision actually behaves as designed, not just as documented.
+- Test business, its bookings, and the throwaway verification script all deleted afterward.
+
+**Blocking fixes**
+- None.
+
+**Open questions**
+- None beyond the pre-existing, already-documented timezone simplification (no timezone field anywhere in this schema — `now` is compared directly against UTC-constructed slot datetimes; noted during planning, not new to this session).
+
+**Next up**
+- Booking submission (`POST /public/bookings` or similar) — the actual consumer of `generateSlots()`, and the reason it was extracted into `lib/slots.ts` instead of being inlined into this route.
+
 ## 2026-07-19 — Booking form field management (POST/PATCH/DELETE + reorder)
 
 **Shipped**
