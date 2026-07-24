@@ -90,3 +90,7 @@ just do it as the last step of the session.
   populate `err.meta?.modelName`, not `err.meta?.target` (the latter is undefined 
   on this adapter, unlike vanilla Prisma). Always check `modelName` when catching 
   unique-constraint violations.
+
+## JWT Statelessness
+
+  - Right now short expiry is enough for MVP. If a token is compromised it dies in minutes anyway.Refresh token rotation would be the natural next step when Orbis moves toward production. That's the industry standard pattern right now. {ethics/security section}
