@@ -9,16 +9,16 @@ import publicRoutes from './routes/public.js'
 const app = express()
 const PORT = process.env.PORT || 5000
 
-// Middleware
 app.use(cors())
 app.use(express.json())
 
-// Health check
+// Kept minimal and unauthenticated on purpose, just to confirm the API is up.
 app.get('/', (req, res) => {
   res.json({ message: 'Orbis Scheduler API is running' })
 })
 
-// Routes — we'll wire these in as we build them
+// Split by audience. /public has no auth; /owner and /admin each apply their own auth
+// middleware per route.
 app.use('/auth', authRoutes)
 app.use('/public', publicRoutes)
 app.use('/owner', ownerRoutes)

@@ -8,18 +8,18 @@ import { sendMail } from '../lib/mailer.js'
 
 const router = Router()
 
-// UC11 — Admin approves a pending business registration.
+// Approves a pending business registration.
 router.patch('/businesses/:id/approve', authenticate, requireAdmin, async (req, res) => {
   const id = req.params.id as string
 
   try {
-    // Business ans user are related. Includes the related User with business Id so the owner's email is available for the notification below without a second query.
+    // Includes the related user so the owner's email is available below without a second query.
     const business = await prisma.business.findUnique({ where: { id }, include: { user: true } })
 
     if (!business) {
       return res.status(404).json({ error: 'Business not found.' })
     }
-    // Idempotency guard below prevents double-approval and prevents this route from silently reverting a rejected business back to approved.
+    // Prevents approving twice, and prevents silently reverting a rejected business back to approved.
     if (business.approvalStatus === 'approved') {
       return res.status(400).json({ error: 'Business is already approved' })
     }
@@ -42,7 +42,7 @@ router.patch('/businesses/:id/approve', authenticate, requireAdmin, async (req, 
   }
 })
 
-// UC11 — Admin rejects a pending business registration with a reason.
+// Rejects a pending business registration with a reason.
 router.patch('/businesses/:id/reject', authenticate, requireAdmin, async (req, res) => {
   const id = req.params.id as string
   const { rejectionReason } = req.body ?? {}
@@ -80,7 +80,7 @@ router.patch('/businesses/:id/reject', authenticate, requireAdmin, async (req, r
   }
 })
 
-// GET /stats — deliberately unscoped: admin has platform-wide visibility, not tenant-scoped.
+// Returns platform-wide stats, not scoped to a single business.
 router.get('/stats', authenticate, requireAdmin, async (req, res) => {
   try {
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
@@ -100,7 +100,7 @@ router.get('/stats', authenticate, requireAdmin, async (req, res) => {
       prisma.business.count({ where: { approvalStatus: 'rejected' } }),
       prisma.business.count({ where: { approvalStatus: 'approved', isActive: false } }),
       prisma.booking.count(),
-      // Rolling 7 days, not the current calendar week — see DEVLOG for the reasoning.
+      // Rolling 7 days, not the current calendar week.
       prisma.booking.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
     ])
 
@@ -119,7 +119,7 @@ router.get('/stats', authenticate, requireAdmin, async (req, res) => {
   }
 })
 
-// GET /businesses — unscoped platform-wide list, paginated/filtered/searched.
+// Lists every business on the platform, paginated and filterable.
 router.get('/businesses', authenticate, requireAdmin, async (req, res) => {
   const { status, isActive, search, page: pageParam } = req.query
 
@@ -192,7 +192,7 @@ router.get('/businesses', authenticate, requireAdmin, async (req, res) => {
   }
 })
 
-// GET /businesses/:id — unscoped: admin can view any business by id.
+// Returns full detail for any business by id.
 router.get('/businesses/:id', authenticate, requireAdmin, async (req, res) => {
   const id = req.params.id as string
 
@@ -228,8 +228,7 @@ router.get('/businesses/:id', authenticate, requireAdmin, async (req, res) => {
   }
 })
 
-// PATCH /businesses/:id/suspend — suspend/activate only apply to approved businesses;
-// pending/rejected are governed by the approve/reject endpoints above, not this one.
+// Suspends an approved business. Pending or rejected businesses use approve/reject instead.
 router.patch('/businesses/:id/suspend', authenticate, requireAdmin, async (req, res) => {
   const id = req.params.id as string
 
@@ -248,7 +247,7 @@ router.patch('/businesses/:id/suspend', authenticate, requireAdmin, async (req, 
 
     await prisma.business.update({ where: { id }, data: { isActive: false } })
 
-    // No email here, deliberately — logged MVP gap per the use case doc, not this session's job to fix.
+    // No email is sent here. That's a known gap, not something this change needs to fix.
     res.status(200).json({ message: 'Business suspended successfully.' })
   } catch (err) {
     console.error('Failed to suspend business', err)
@@ -256,7 +255,7 @@ router.patch('/businesses/:id/suspend', authenticate, requireAdmin, async (req, 
   }
 })
 
-// PATCH /businesses/:id/activate — mirrors /suspend's precondition and no-email pattern.
+// Reactivates a suspended business.
 router.patch('/businesses/:id/activate', authenticate, requireAdmin, async (req, res) => {
   const id = req.params.id as string
 

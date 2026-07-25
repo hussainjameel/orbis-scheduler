@@ -10,8 +10,7 @@ const router = Router()
 
 const TIME_FORMAT = /^([01]\d|2[0-3]):([0-5]\d)$/
 
-//Converts "09:30" into a single number (570) minutes since midnight. Why bother? 
-// Because comparing times as numbers is far simpler than comparing strings i.e "09:30" < "10:00"
+// Minutes-since-midnight — lets start/end/break times compare as plain numbers instead of strings.
 function parseTimeToMinutes(time: string): number {
   const [hours, minutes] = time.split(':').map(Number)
   return hours! * 60 + minutes!
@@ -20,7 +19,7 @@ function parseTimeToMinutes(time: string): number {
 const VALID_FIELD_TYPES = ['text', 'textarea', 'dropdown', 'checkbox', 'radio']
 const OPTIONS_REQUIRED_TYPES = ['dropdown', 'checkbox', 'radio']
 
-// GET /business
+// Returns the current business's profile.
 router.get('/business', authenticate, requireApprovedBusiness, async (req, res) => {
   const businessId = req.user?.businessId as string
 
@@ -53,7 +52,7 @@ router.get('/business', authenticate, requireApprovedBusiness, async (req, res) 
   }
 })
 
-// PATCH /business
+// Updates editable profile fields. Name and slug are fixed after registration.
 router.patch('/business', authenticate, requireApprovedBusiness, async (req, res) => {
   const businessId = req.user?.businessId as string
   const { name, slug, description, phone, contactEmail, websiteUrl } = req.body ?? {}
@@ -78,7 +77,7 @@ router.patch('/business', authenticate, requireApprovedBusiness, async (req, res
   }
 })
 
-// GET /availability
+// Returns the business's weekly availability.
 router.get('/availability', authenticate, requireApprovedBusiness, async (req, res) => {
   const businessId = req.user?.businessId as string
 
@@ -104,18 +103,17 @@ router.get('/availability', authenticate, requireApprovedBusiness, async (req, r
   }
 })
 
-// PUT /availability
+// Replaces the full week of availability in one call.
 router.put('/availability', authenticate, requireApprovedBusiness, async (req, res) => {
   const businessId = req.user?.businessId as string
   const days = req.body
 
-  // The whole week must be submitted as one array of exactly 7 entries.
+  // Must submit the whole week as one array of exactly 7 entries.
   if (!Array.isArray(days) || days.length !== 7) {
     return res.status(400).json({ error: 'Exactly 7 day entries are required' })
   }
 
-  // First pass: check each day's basic shape and catch duplicate days,
-  // before doing any time-based validation.
+  // First pass checks each day's shape and catches duplicates before any time validation.
   const seenDays = new Set<number>()
   for (const day of days) {
     if (typeof day?.dayOfWeek !== 'number' || !Number.isInteger(day.dayOfWeek) || day.dayOfWeek < 0 || day.dayOfWeek > 6) {
@@ -135,7 +133,7 @@ router.put('/availability', authenticate, requireApprovedBusiness, async (req, r
     return res.status(400).json({ error: 'At least one day must be available' })
   }
 
-  // Second pass: only open days need real hours validated.
+  // Second pass validates hours, but only for days marked open.
   for (const day of days) {
     if (day.isAvailable !== true) continue
 
@@ -148,7 +146,6 @@ router.put('/availability', authenticate, requireApprovedBusiness, async (req, r
       return res.status(400).json({ error: `Day ${dayOfWeek}: startTime and endTime must be in HH:MM format` })
     }
 
-    // Convert to minutes-since-midnight so times can be compared as plain numbers.
     const startMinutes = parseTimeToMinutes(startTime)
     const endMinutes = parseTimeToMinutes(endTime)
 
@@ -156,8 +153,7 @@ router.put('/availability', authenticate, requireApprovedBusiness, async (req, r
       return res.status(400).json({ error: `Day ${dayOfWeek}: endTime must be after startTime` })
     }
 
-    // Break is optional, but if either half is sent, both must be, and
-    // must sit fully inside the open window.
+    // A break is optional, but if one side is sent both must be, and both must fall inside the open window.
     let breakMinutes = 0
     if (breakStart != null || breakEnd != null) {
       if (!breakStart || !breakEnd) {
@@ -184,7 +180,7 @@ router.put('/availability', authenticate, requireApprovedBusiness, async (req, r
       return res.status(400).json({ error: `Day ${dayOfWeek}: slotDurationMinutes is required and must be a positive integer` })
     }
 
-    // A day marked open must actually fit at least one real appointment.
+    // A day marked open must fit at least one real appointment.
     const availableMinutes = endMinutes - startMinutes - breakMinutes
     if (Math.floor(availableMinutes / slotDurationMinutes) < 1) {
       return res.status(400).json({ error: `Day ${dayOfWeek}: slotDurationMinutes does not fit any whole slot in the available time window` })
@@ -192,12 +188,10 @@ router.put('/availability', authenticate, requireApprovedBusiness, async (req, r
   }
 
   try {
-    // All 7 upserts run as one unit — a failure partway through rolls back
-    // every day, so the week is never left half-updated.
+    // All 7 upserts run in one transaction, so a failure partway through can't leave the week half-updated.
     await prisma.$transaction(async (tx) => {
       for (const day of days) {
-        // Closed days store null for all time fields — no fake placeholder
-        // data for future slot-calculation code to trip over.
+        // Closed days store null for every time field instead of placeholder values.
         const data = day.isAvailable
           ? {
               isAvailable: true,
@@ -216,9 +210,7 @@ router.put('/availability', authenticate, requireApprovedBusiness, async (req, r
               slotDurationMinutes: null,
             }
 
-        // businessId_dayOfWeek is the compound key from the @@unique 
-        // constraint — updates the existing row for this day if one 
-        // exists, creates it otherwise.
+        // businessId_dayOfWeek is the compound unique key, so this updates the day's row if one exists, or creates it.
         await tx.availabilityRule.upsert({
           where: { businessId_dayOfWeek: { businessId, dayOfWeek: day.dayOfWeek } },
           update: data,
@@ -234,7 +226,7 @@ router.put('/availability', authenticate, requireApprovedBusiness, async (req, r
   }
 })
 
-// GET /form
+// Returns the booking form and its fields.
 router.get('/form', authenticate, requireApprovedBusiness, async (req, res) => {
   const businessId = req.user?.businessId as string
 
@@ -289,7 +281,7 @@ router.get('/form', authenticate, requireApprovedBusiness, async (req, res) => {
   }
 })
 
-// PUT /form
+// Updates the form's title, description, and booking window.
 router.put('/form', authenticate, requireApprovedBusiness, async (req, res) => {
   const businessId = req.user?.businessId as string
   const { title, description, bookingWindowDays } = req.body ?? {}
@@ -323,7 +315,7 @@ router.put('/form', authenticate, requireApprovedBusiness, async (req, res) => {
   }
 })
 
-// POST /form/fields
+// Adds a new field to the booking form.
 router.post('/form/fields', authenticate, requireApprovedBusiness, async (req, res) => {
   const businessId = req.user?.businessId as string
   const { label, fieldType, isRequired, options } = req.body ?? {}
@@ -369,11 +361,10 @@ router.post('/form/fields', authenticate, requireApprovedBusiness, async (req, r
       data: {
         formId: form.id,
         label,
-        // Already validated against VALID_FIELD_TYPES above; cast narrows the plain
-        // string from req.body to Prisma's generated FieldType literal union.
+        // fieldType was already checked against VALID_FIELD_TYPES above, so this cast is safe.
         fieldType: fieldType as FieldType,
         isRequired: isRequiredValue,
-        // Never trust a client-supplied isProtected — every created field starts unprotected.
+        // isProtected is never read from the request. Every new field starts unprotected.
         isProtected: false,
         displayOrder,
         options: needsOptions ? options : null,
@@ -388,7 +379,7 @@ router.post('/form/fields', authenticate, requireApprovedBusiness, async (req, r
   }
 })
 
-// PATCH /form/fields/:id
+// Updates a non-protected field's label, required flag, or options.
 router.patch('/form/fields/:id', authenticate, requireApprovedBusiness, async (req, res) => {
   const businessId = req.user?.businessId as string
   const fieldId = Number(req.params.id as string)
@@ -399,7 +390,7 @@ router.patch('/form/fields/:id', authenticate, requireApprovedBusiness, async (r
   }
 
   try {
-    // Ownership is enforced via the relation join — a field id alone is never enough.
+    // Joins through the form to confirm this field belongs to the caller's business.
     const field = await prisma.formField.findFirst({ where: { id: fieldId, form: { businessId } } })
 
     if (!field) {
@@ -429,7 +420,7 @@ router.patch('/form/fields/:id', authenticate, requireApprovedBusiness, async (r
     }
 
     if (options !== undefined) {
-      // Required-ness is checked against the field's existing (immutable) type, not a submitted one.
+      // Whether options are required is based on the field's existing type, since fieldType can't change.
       const needsOptions = OPTIONS_REQUIRED_TYPES.includes(field.fieldType)
       if (needsOptions) {
         if (!Array.isArray(options) || options.length === 0 || !options.every((o: unknown) => typeof o === 'string')) {
@@ -439,8 +430,7 @@ router.patch('/form/fields/:id', authenticate, requireApprovedBusiness, async (r
       } else if (options !== null) {
         return res.status(400).json({ error: 'options must be omitted or null for text and textarea fields' })
       } else {
-        // Nullable Json columns need Prisma's JsonNull sentinel, not a plain `null`,
-        // to actually clear the column on update.
+        // Prisma needs its JsonNull sentinel here, not a plain null, or the column won't actually clear.
         data.options = Prisma.JsonNull
       }
     }
@@ -454,7 +444,7 @@ router.patch('/form/fields/:id', authenticate, requireApprovedBusiness, async (r
   }
 })
 
-// DELETE /form/fields/:id
+// Deletes a non-protected field and its past answers.
 router.delete('/form/fields/:id', authenticate, requireApprovedBusiness, async (req, res) => {
   const businessId = req.user?.businessId as string
   const fieldId = Number(req.params.id as string)
@@ -473,8 +463,7 @@ router.delete('/form/fields/:id', authenticate, requireApprovedBusiness, async (
       return res.status(403).json({ error: 'This field is protected and cannot be deleted.' })
     }
 
-    // booking_field_values.formFieldId -> form_fields.id is ON DELETE RESTRICT,
-    // so any historical answers for this field must go first, in the same transaction.
+    // The database won't let a field be deleted while old answers still reference it, so those go first in the same transaction.
     await prisma.$transaction(async (tx) => {
       await tx.bookingFieldValue.deleteMany({ where: { formFieldId: field.id } })
       await tx.formField.delete({ where: { id: field.id } })
@@ -487,7 +476,7 @@ router.delete('/form/fields/:id', authenticate, requireApprovedBusiness, async (
   }
 })
 
-// PUT /form/fields/reorder
+// Reorders all fields on the form in one call.
 router.put('/form/fields/reorder', authenticate, requireApprovedBusiness, async (req, res) => {
   const businessId = req.user?.businessId as string
   const updates = req.body
@@ -519,8 +508,7 @@ router.put('/form/fields/reorder', authenticate, requireApprovedBusiness, async 
     const existingFields = await prisma.formField.findMany({ where: { formId: form.id }, select: { id: true } })
     const existingIds = new Set(existingFields.map((f) => f.id))
 
-    // Unrecognized/other-business ids are checked first (specific message), then completeness
-    // (only reachable once every submitted id is already confirmed valid).
+    // Unknown or other-business ids are checked before completeness, so an invalid id gets a specific error.
     for (const id of seenIds) {
       if (!existingIds.has(id)) {
         return res.status(400).json({ error: `Field ${id} does not belong to this form` })
@@ -545,7 +533,7 @@ router.put('/form/fields/reorder', authenticate, requireApprovedBusiness, async 
 
 const BOOKING_STATUSES = ['pending', 'approved', 'rejected', 'cancelled']
 
-// GET /bookings
+// Lists this business's bookings, paginated and filterable.
 router.get('/bookings', authenticate, requireApprovedBusiness, async (req, res) => {
   const businessId = req.user?.businessId as string
   const { status, search, page: pageParam } = req.query
@@ -602,7 +590,7 @@ router.get('/bookings', authenticate, requireApprovedBusiness, async (req, res) 
   }
 })
 
-// GET /bookings/:id
+// Returns full detail for one booking.
 router.get('/bookings/:id', authenticate, requireApprovedBusiness, async (req, res) => {
   const businessId = req.user?.businessId as string
   const bookingId = Number(req.params.id as string)
@@ -647,7 +635,7 @@ router.get('/bookings/:id', authenticate, requireApprovedBusiness, async (req, r
   }
 })
 
-// PATCH /bookings/:id/approve
+// Approves a pending booking and notifies the customer.
 router.patch('/bookings/:id/approve', authenticate, requireApprovedBusiness, async (req, res) => {
   const businessId = req.user?.businessId as string
   const bookingId = Number(req.params.id as string)
@@ -689,7 +677,7 @@ router.patch('/bookings/:id/approve', authenticate, requireApprovedBusiness, asy
   }
 })
 
-// PATCH /bookings/:id/reject
+// Rejects a pending booking and notifies the customer.
 router.patch('/bookings/:id/reject', authenticate, requireApprovedBusiness, async (req, res) => {
   const businessId = req.user?.businessId as string
   const bookingId = Number(req.params.id as string)
@@ -731,7 +719,7 @@ router.patch('/bookings/:id/reject', authenticate, requireApprovedBusiness, asyn
   }
 })
 
-// PATCH /bookings/:id/cancel
+// Cancels an approved booking and notifies the customer.
 router.patch('/bookings/:id/cancel', authenticate, requireApprovedBusiness, async (req, res) => {
   const businessId = req.user?.businessId as string
   const bookingId = Number(req.params.id as string)
