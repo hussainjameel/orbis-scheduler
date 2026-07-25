@@ -55,13 +55,14 @@ CREATE TABLE "availability_rules" (
   "id" SERIAL PRIMARY KEY,
   "business_id" uuid NOT NULL,
   "day_of_week" smallint NOT NULL,
-  "start_time" time NOT NULL,
-  "end_time" time NOT NULL,
+  "start_time" time,
+  "end_time" time,
   "break_start" time,
   "break_end" time,
-  "slot_duration_minutes" smallint NOT NULL,
+  "slot_duration_minutes" smallint,
   "is_available" boolean NOT NULL DEFAULT true,
-  "updated_at" timestamp NOT NULL DEFAULT (now())
+  "updated_at" timestamp NOT NULL DEFAULT (now()),
+  UNIQUE ("business_id", "day_of_week")
 );
 
 CREATE TABLE "booking_forms" (
@@ -82,6 +83,7 @@ CREATE TABLE "form_fields" (
   "field_type" field_type NOT NULL,
   "options" jsonb,
   "is_required" boolean NOT NULL DEFAULT false,
+  "is_protected" boolean NOT NULL DEFAULT false,
   "display_order" smallint NOT NULL,
   "created_at" timestamp NOT NULL DEFAULT (now())
 );
@@ -150,7 +152,11 @@ COMMENT ON COLUMN "businesses"."rejection_reason" IS 'Admin fills on rejection';
 
 COMMENT ON COLUMN "availability_rules"."day_of_week" IS '0 = Monday, 6 = Sunday';
 
-COMMENT ON COLUMN "availability_rules"."slot_duration_minutes" IS 'e.g. 30 or 60';
+COMMENT ON COLUMN "availability_rules"."slot_duration_minutes" IS 'e.g. 30 or 60; null when is_available is false';
+
+COMMENT ON COLUMN "availability_rules"."start_time" IS 'null when is_available is false';
+
+COMMENT ON COLUMN "availability_rules"."end_time" IS 'null when is_available is false';
 
 COMMENT ON COLUMN "booking_forms"."title" IS 'e.g. Book a Consultation';
 
@@ -161,6 +167,8 @@ COMMENT ON COLUMN "booking_forms"."is_active" IS 'Only one active form per busin
 COMMENT ON COLUMN "form_fields"."label" IS 'e.g. Choose your suburb';
 
 COMMENT ON COLUMN "form_fields"."options" IS 'Array of options for dropdown/radio/checkbox';
+
+COMMENT ON COLUMN "form_fields"."is_protected" IS 'System field (Name/Email) — can''t be deleted/edited later';
 
 COMMENT ON COLUMN "form_fields"."display_order" IS 'Controls render order on the form';
 
