@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express'
 import prisma from '../lib/prisma.js'
 
+// Only owner tokens carry businessId, so this also blocks admin tokens from owner routes.
 export async function requireApprovedBusiness(req: Request, res: Response, next: NextFunction) {
   if (!req.user?.businessId) {
     return res.status(403).json({ error: 'Owner access required.' })
@@ -13,6 +14,8 @@ export async function requireApprovedBusiness(req: Request, res: Response, next:
       return res.status(404).json({ error: 'Business not found.' })
     }
 
+    // Repeats login's same three checks, since a token can outlive a business being
+    // rejected or suspended after it was issued.
     if (business.approvalStatus === 'pending') {
       return res.status(403).json({
         error: 'Your registration is still under review. We will email you once your account is approved.',

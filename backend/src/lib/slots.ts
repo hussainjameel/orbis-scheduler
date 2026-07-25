@@ -22,7 +22,7 @@ export function generateSlots(params: {
   slotDurationMinutes: number
   bookedTimes: Set<string>
   date: { year: number; month: number; day: number }
-  now?: Date
+  now?: Date // lets tests pass a fixed time instead of the real clock
 }): Slot[] {
   const { startTime, endTime, breakStart, breakEnd, slotDurationMinutes, bookedTimes, date, now = new Date() } = params
 
@@ -33,10 +33,11 @@ export function generateSlots(params: {
 
   const slots: Slot[] = []
 
+  // Stops once a full slot no longer fits before endTime, so no partial slot is offered.
   for (let slotStart = startMinutes; slotStart + slotDurationMinutes <= endMinutes; slotStart += slotDurationMinutes) {
     const slotEnd = slotStart + slotDurationMinutes
 
-    // Standard half-open-interval overlap test — excludes any slot touching the break at all.
+    // Excludes any slot that overlaps the break at all.
     if (breakStartMinutes !== null && breakEndMinutes !== null) {
       const overlapsBreak = slotStart < breakEndMinutes && slotEnd > breakStartMinutes
       if (overlapsBreak) continue
@@ -45,8 +46,8 @@ export function generateSlots(params: {
     const time = minutesToTime(slotStart)
     let available = !bookedTimes.has(time)
 
-    // Applies to every date uniformly (today's already-passed times AND fully-past dates) —
-    // a slot's real datetime is always compared against now, no "is this today" branch.
+    // Compares every slot's real datetime against now, with no separate check for today
+    // versus a past date.
     if (available) {
       const slotDateTime = new Date(Date.UTC(date.year, date.month - 1, date.day, Math.floor(slotStart / 60), slotStart % 60))
       if (slotDateTime <= now) {

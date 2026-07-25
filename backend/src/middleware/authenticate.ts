@@ -2,15 +2,15 @@ import type { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
 import type { AuthenticatedUser } from '../types/express.js'
 
-// jwt.verify() only proves a token is genuine and unexpired — it says nothing about whether the decoded payload actually has the fields our app expects.
-// This type guard checks the actual shape at runtime, and narrows `payload` to AuthenticatedUser for TypeScript wherever this function returns true.
+// jwt.verify only proves the token is genuine and unexpired, not that the payload has the
+// fields we expect. This checks that at runtime and narrows the type for TypeScript.
 function isAuthenticatedUserPayload(payload: unknown): payload is AuthenticatedUser {
   if (typeof payload !== 'object' || payload === null) return false
   const candidate = payload as Record<string, unknown>
   return (
     typeof candidate.userId === 'number' &&
     typeof candidate.role === 'string' &&
-    // businessId is optional — admin tokens never carry one, owner tokens always do.
+    // businessId is optional. Admin tokens never carry one; owner tokens always do.
     (candidate.businessId === undefined || typeof candidate.businessId === 'string')
   )
 }
@@ -22,7 +22,6 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
     return res.status(401).json({ error: 'Authentication required' })
   }
 
-  // Strip the "Bearer " prefix to get just the token string.
   const token = authHeader.slice('Bearer '.length).trim()
 
   const jwtSecret = process.env.JWT_SECRET
@@ -33,28 +32,27 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
   }
 
   try {
-  // Verifies token by splitting it into header/payload/signature and comparing against a signature recomputed using JWT_SECRET. Throws if invalid/expired.
-  // Returns the decoded payload: { userId, role, businessId?, iat, exp }
+    // jwt.verify throws if the signature is wrong or the token expired. Both land in the
+    // catch below as the same generic 401.
     const decoded = jwt.verify(token, jwtSecret)
 
-    // Signature can be valid while the payload shape is still wrong/unexpected
-    // (e.g. an old token format). Treat that the same as an invalid token.
+    // The signature can be valid even if the payload shape is wrong, like an old token
+    // format. Treat that the same as invalid.
     if (!isAuthenticatedUserPayload(decoded)) {
       console.error('JWT verified but payload has an unexpected shape')
       return res.status(401).json({ error: 'Invalid or expired token' })
     }
 
-    // Rebuild a clean object rather than assigning `decoded` directly, so
-    // req.user only ever contains exactly these known fields.
+    // Built fresh instead of assigning decoded directly, so req.user only ever has these
+    // known fields.
     const user: AuthenticatedUser = { userId: decoded.userId, role: decoded.role }
     if (decoded.businessId !== undefined) {
       user.businessId = decoded.businessId
     }
 
-    // Attach the verified identity to the request 
     req.user = user
 
-    next() // hand off to the actual route handler
+    next()
   } catch (err) {
     console.error(err)
     return res.status(401).json({ error: 'Invalid or expired token' })

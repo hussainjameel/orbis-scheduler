@@ -13,14 +13,15 @@ function parseCalendarDate(dateStr: string): { year: number; month: number; day:
   if (!DATE_FORMAT.test(dateStr)) return null
   const [year, month, day] = dateStr.split('-').map(Number)
   const asDate = new Date(Date.UTC(year!, month! - 1, day!))
-  // JS Date silently rolls over invalid dates (e.g. Feb 30 -> Mar 2) instead of
-  // rejecting them — round-tripping the components back out catches that.
+  // JS silently rolls invalid dates forward (Feb 30 becomes Mar 2) instead of
+  // rejecting them, so the parsed date is checked against what was requested.
   if (asDate.getUTCFullYear() !== year || asDate.getUTCMonth() !== month! - 1 || asDate.getUTCDate() !== day) {
     return null
   }
   return { year: year!, month: month!, day: day! }
 }
 
+// Returns public profile info for an approved, active business.
 router.get('/businesses/:businessId', async (req, res) => {
   const businessId = req.params.businessId
 
@@ -30,6 +31,7 @@ router.get('/businesses/:businessId', async (req, res) => {
       select: { id: true, name: true, description: true, phone: true, approvalStatus: true, isActive: true },
     })
 
+    // Not found, not approved, and suspended all return the same 404, so a customer can't tell them apart.
     if (!business || business.approvalStatus !== 'approved' || !business.isActive) {
       return res.status(404).json({ error: 'Business not found.' })
     }
@@ -48,6 +50,7 @@ router.get('/businesses/:businessId', async (req, res) => {
   }
 })
 
+// Returns bookable time slots for a business on a given date.
 router.get('/slots', async (req, res) => {
   const { businessId, date } = req.query
 
@@ -77,11 +80,13 @@ router.get('/slots', async (req, res) => {
       where: { businessId_dayOfWeek: { businessId, dayOfWeek } },
     })
 
+    // No rule, a closed day, or incomplete data all mean nothing is bookable, not a server error.
     if (!rule || !rule.isAvailable || !rule.startTime || !rule.endTime || !rule.slotDurationMinutes) {
       return res.status(200).json({ date, slotDurationMinutes: null, slots: [] })
     }
 
     const bookingDateForQuery = new Date(Date.UTC(parsedDate.year, parsedDate.month - 1, parsedDate.day))
+    // Only pending and approved bookings hold a slot. Rejected and cancelled ones free it up.
     const existingBookings = await prisma.booking.findMany({
       where: { businessId, bookingDate: bookingDateForQuery, status: { in: ['pending', 'approved'] } },
       select: { bookingTime: true },
@@ -105,6 +110,7 @@ router.get('/slots', async (req, res) => {
   }
 })
 
+// Validates and creates a customer booking.
 router.post('/bookings', async (req, res) => {
   const { businessId, formId, bookingDate, bookingTime, customerName, customerEmail, customerPhone, fieldValues } = req.body ?? {}
 
@@ -145,19 +151,19 @@ router.post('/bookings', async (req, res) => {
       return res.status(404).json({ error: 'Booking form not found.' })
     }
 
-    // Step 4: bookingDate must fall within [today, today + bookingWindowDays], UTC whole days.
     const now = new Date()
     const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
     const bookingDateUTC = Date.UTC(parsedDate.year, parsedDate.month - 1, parsedDate.day)
     const daysDiff = Math.round((bookingDateUTC - todayUTC) / 86400000)
 
+    // The window runs from today through bookingWindowDays ahead. A past date is rejected
+    // here, not treated as the slot-taken case below.
     if (daysDiff < 0 || daysDiff > form.bookingWindowDays) {
       return res.status(400).json({ error: 'bookingDate is outside the allowed booking window' })
     }
 
-    // Step 5: re-run the exact same slot generation GET /slots uses, and require
-    // the requested time to come back available — anything else (closed day, break,
-    // already booked, malformed time) collapses to the same 409, per spec.
+    // Recomputes availability instead of trusting what the client last saw, since it may be
+    // stale. Any unavailable result, for any reason, returns the same 409 below.
     const jsDay = new Date(bookingDateUTC).getUTCDay()
     const dayOfWeek = (jsDay + 6) % 7
     const rule = await prisma.availabilityRule.findUnique({ where: { businessId_dayOfWeek: { businessId, dayOfWeek } } })
@@ -186,7 +192,8 @@ router.post('/bookings', async (req, res) => {
       return res.status(409).json({ error: 'This slot was just taken. Please select another time.' })
     }
 
-    // Step 6: field-level validation, in the spec's listed order.
+    // Three separate checks: required fields, valid options, then unknown field ids. The order
+    // only decides which error wins when more than one fails.
     const fields = await prisma.formField.findMany({ where: { formId: form.id } })
     const submitted: Array<{ formFieldId: number; value: string }> = Array.isArray(fieldValues)
       ? fieldValues.filter(
@@ -224,8 +231,9 @@ router.post('/bookings', async (req, res) => {
       }
     }
 
-    // Steps 7-8: the transaction's insert is the real race-condition backstop —
-    // the checks above are optimistic; the partial unique index is what actually enforces it.
+    // The checks above are optimistic; two requests can both pass before either writes. A
+    // unique index only allows one active booking per business, date, and time, so the
+    // second insert fails and is caught below as the same 409.
     let booking
     try {
       booking = await prisma.$transaction(async (tx) => {
@@ -257,7 +265,7 @@ router.post('/bookings', async (req, res) => {
       throw err
     }
 
-    // Step 9: best-effort notifications — never block the response.
+    // Both emails are sent without blocking the response if one fails.
     await Promise.all([
       sendMail({
         to: customerEmail,
