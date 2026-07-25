@@ -1,5 +1,37 @@
 # Orbis Scheduler — Development Log
 
+## 2026-07-25 — Owner-facing booking management (5 endpoints)
+
+**Shipped**
+- **404-vs-403 decision, resolved with evidence before writing any code**: the task doc's design principles and UC9 A3 disagreed on what happens when an owner hits a `:id` route for another business's booking (404 vs. 403 Forbidden). Traced it through git history — the only place this codebase ever used `403` for a cross-tenant mismatch was a draft route deleted in the very next commit; the live, most-recently-written precedent (`PATCH`/`DELETE /form/fields/:id`) uses `404` for exactly this scenario, reserving `403` for a different concern entirely (business-rule violations, not tenant mismatch). Went with `404`, matching the codebase's actual convention over the older use-case doc.
+- `GET /owner/bookings` (`backend/src/routes/owner.ts`): paginated (25/page), scoped to `req.user.businessId` regardless of any param, optional `status` filter (validated against the 4 enum values) and `search` (case-insensitive `contains` match against `customerName` OR `customerEmail` — the first use of Prisma's `mode: 'insensitive'` anywhere in this project). Returns `{ bookings, total, page, totalPages }`.
+- `GET /owner/bookings/:id`: full detail including `fieldValues` resolved to `{ label, value }` pairs (joined through `FormField`, ordered by `displayOrder`) instead of raw `formFieldId`s.
+- `PATCH /owner/bookings/:id/approve|reject|cancel`: each requires a specific prior status (`pending` for approve/reject, `approved` for cancel — cancel only applies post-approval per UC9 A2), optional `ownerNotes`, best-effort customer-notification email. Wrong-state attempts get `400` with the actual current status named in the message (unlike `admin.ts`'s narrower "already approved" precedent, this can fail from several different prior states, so the message says which one).
+- Three independent `PATCH` handlers, not a shared helper, despite the similarity — matches `admin.ts`'s approve/reject precedent, which has the same shape of duplication and also doesn't abstract it.
+
+**Verified (curl + a small Node script for bulk test-data creation, live dev DB)**
+- Created 27 bookings via the real `POST /public/bookings` endpoint (not a DB script) to get genuine pagination test data, plus 4 named bookings for the individual status-transition tests, plus 1 for a second business (cross-tenant check).
+- `GET /owner/bookings` unfiltered: `total: 31, page: 1, totalPages: 2`, exactly 25 on page 1 and 6 on page 2, exact field set per spec, newest-first ordering.
+- `?status=` filtering confirmed both ways (31 pending, 0 approved, before any transitions); invalid `status` → `400`.
+- `?search=` confirmed case-insensitive on **both** fields independently: a lowercase partial-name search matched a title-cased customer name; an uppercase full-email search matched a lowercase stored email. A non-matching term correctly returned zero results.
+- `GET /owner/bookings/:id` detail shape confirmed, `fieldValues` showing real labels ("Name"/"Email"/"Phone"), not ids.
+- Cross-business `:id` and a nonexistent `:id` → diffed the two 404 response bodies, byte-identical — directly validates the decision above wasn't just a stated intention.
+- Full approve → re-approve (`400`, current status named), reject, and cancel flows all verified end-to-end, including **re-querying `GET /public/slots` before and after each reject/cancel** to confirm the freed slot actually flips back to `available: true` — not just that the `Booking.status` column changed, but that the change is visible through the other endpoint that reads it.
+- Cancel-on-a-still-`pending`-booking correctly rejected (`400`), confirming UC9 A2's approved-only rule.
+- All 5 endpoints × pending/rejected/suspended business states → all 15 combinations returned the exact matching `requireApprovedBusiness` wording.
+- A genuinely useful side-effect of the volume test: Mailtrap's sandbox hit a **harder limit than last session's** — `535 5.7.0 The email limit is reached` (an account-level quota, not the earlier per-second throttling), from the cumulative 60+ emails this session's test data generated. Every failure was still caught and logged without blocking a single response, including during the approve/reject/cancel tests — the exact behavior the spec requires, now confirmed under a harder failure mode than previously observed.
+- All test data (both businesses, all 32 bookings) and the throwaway verification script deleted afterward.
+
+**Blocking fixes**
+- None new — same stale-port-5000-process issue as last session (a leftover `tsx`/nodemon child survived `TaskStop`), caught immediately this time via the same `netstat`/`taskkill` diagnostic before it could cause confusion, and cleaned up again after this session's server was stopped.
+
+**Open questions**
+- Mailtrap's sandbox quota is now hard-exhausted for real email-delivery confirmation (not just rate-limited) — worth checking the account limits/upgrading before relying on Mailtrap for demo purposes, or switching test conventions to create less booking volume per session.
+- `Booking` still has no indexes beyond its primary key (noted during planning, not fixed here, out of stated scope) — `businessId`/`status`/`createdAt` are all filtered/sorted on in the new list endpoint with nothing but a sequential scan backing it. Fine at current data volumes, worth revisiting before real load.
+
+**Next up**
+- This closes the core owner-facing booking loop (create → view → approve/reject/cancel). Remaining known gaps: admin's ability to suspend a business (`isActive`) has no API path yet (only direct DB access, used repeatedly across sessions for testing), and there's still no frontend consuming any of this.
+
 ## 2026-07-20 — `POST /public/bookings` — booking submission (highest-risk endpoint)
 
 **Shipped**

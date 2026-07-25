@@ -90,3 +90,8 @@ just do it as the last step of the session.
   populate `err.meta?.modelName`, not `err.meta?.target` (the latter is undefined 
   on this adapter, unlike vanilla Prisma). Always check `modelName` when catching 
   unique-constraint violations.
+
+
+
+  "UC9 A3's '403 Forbidden' wording is superseded by the codebase's consistent 404-for-cross-tenant pattern, chosen for its stronger anti-enumeration property"
+  

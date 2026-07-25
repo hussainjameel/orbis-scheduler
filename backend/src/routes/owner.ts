@@ -1,9 +1,10 @@
 import { Router } from 'express'
 import { Prisma } from '@prisma/client'
-import type { FieldType } from '@prisma/client'
+import type { FieldType, BookingStatus } from '@prisma/client'
 import prisma from '../lib/prisma.js'
 import { authenticate } from '../middleware/authenticate.js'
 import { requireApprovedBusiness } from '../middleware/requireApprovedBusiness.js'
+import { sendMail } from '../lib/mailer.js'
 
 const router = Router()
 
@@ -538,6 +539,236 @@ router.put('/form/fields/reorder', authenticate, requireApprovedBusiness, async 
     res.status(200).json({ message: 'Fields reordered successfully.' })
   } catch (err) {
     console.error('Failed to reorder fields', err)
+    res.status(500).json({ error: 'Something went wrong, please try again' })
+  }
+})
+
+const BOOKING_STATUSES = ['pending', 'approved', 'rejected', 'cancelled']
+
+// GET /bookings
+router.get('/bookings', authenticate, requireApprovedBusiness, async (req, res) => {
+  const businessId = req.user?.businessId as string
+  const { status, search, page: pageParam } = req.query
+
+  if (status !== undefined && (typeof status !== 'string' || !BOOKING_STATUSES.includes(status))) {
+    return res.status(400).json({ error: 'status must be one of: pending, approved, rejected, cancelled' })
+  }
+
+  let page = 1
+  if (pageParam !== undefined) {
+    const parsed = Number(pageParam)
+    if (!Number.isInteger(parsed) || parsed < 1) {
+      return res.status(400).json({ error: 'page must be a positive integer' })
+    }
+    page = parsed
+  }
+
+  const PAGE_SIZE = 25
+  const where: Prisma.BookingWhereInput = { businessId }
+  if (typeof status === 'string') {
+    where.status = status as BookingStatus
+  }
+  if (typeof search === 'string' && search.trim().length > 0) {
+    where.OR = [
+      { customerName: { contains: search, mode: 'insensitive' } },
+      { customerEmail: { contains: search, mode: 'insensitive' } },
+    ]
+  }
+
+  try {
+    const [bookings, total] = await Promise.all([
+      prisma.booking.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * PAGE_SIZE,
+        take: PAGE_SIZE,
+        select: {
+          id: true,
+          customerName: true,
+          customerEmail: true,
+          bookingDate: true,
+          bookingTime: true,
+          status: true,
+          createdAt: true,
+        },
+      }),
+      prisma.booking.count({ where }),
+    ])
+
+    res.status(200).json({ bookings, total, page, totalPages: Math.ceil(total / PAGE_SIZE) })
+  } catch (err) {
+    console.error('Failed to fetch bookings', err)
+    res.status(500).json({ error: 'Something went wrong, please try again' })
+  }
+})
+
+// GET /bookings/:id
+router.get('/bookings/:id', authenticate, requireApprovedBusiness, async (req, res) => {
+  const businessId = req.user?.businessId as string
+  const bookingId = Number(req.params.id as string)
+
+  if (!Number.isInteger(bookingId)) {
+    return res.status(404).json({ error: 'Booking not found.' })
+  }
+
+  try {
+    const booking = await prisma.booking.findFirst({
+      where: { id: bookingId, businessId },
+      select: {
+        id: true,
+        customerName: true,
+        customerEmail: true,
+        customerPhone: true,
+        bookingDate: true,
+        bookingTime: true,
+        status: true,
+        ownerNotes: true,
+        createdAt: true,
+        updatedAt: true,
+        fieldValues: {
+          orderBy: { formField: { displayOrder: 'asc' } },
+          select: { value: true, formField: { select: { label: true } } },
+        },
+      },
+    })
+
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found.' })
+    }
+
+    const { fieldValues, ...rest } = booking
+    res.status(200).json({
+      ...rest,
+      fieldValues: fieldValues.map((fv) => ({ label: fv.formField.label, value: fv.value })),
+    })
+  } catch (err) {
+    console.error('Failed to fetch booking', err)
+    res.status(500).json({ error: 'Something went wrong, please try again' })
+  }
+})
+
+// PATCH /bookings/:id/approve
+router.patch('/bookings/:id/approve', authenticate, requireApprovedBusiness, async (req, res) => {
+  const businessId = req.user?.businessId as string
+  const bookingId = Number(req.params.id as string)
+  const { ownerNotes } = req.body ?? {}
+
+  if (!Number.isInteger(bookingId)) {
+    return res.status(404).json({ error: 'Booking not found.' })
+  }
+
+  try {
+    const booking = await prisma.booking.findFirst({
+      where: { id: bookingId, businessId },
+      include: { business: { select: { name: true } } },
+    })
+
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found.' })
+    }
+    if (booking.status !== 'pending') {
+      return res.status(400).json({ error: `Only pending bookings can be approved (current status: ${booking.status})` })
+    }
+
+    await prisma.booking.update({
+      where: { id: booking.id },
+      data: { status: 'approved', ...(ownerNotes !== undefined && { ownerNotes }) },
+    })
+
+    const bookingDateStr = booking.bookingDate.toISOString().slice(0, 10)
+    await sendMail({
+      to: booking.customerEmail,
+      subject: `Your booking has been approved — ${booking.business.name}`,
+      text: `Good news! Your booking with ${booking.business.name} on ${bookingDateStr} at ${booking.bookingTime} has been approved.`,
+    }).catch((err) => console.error('Failed to send booking approval email', err))
+
+    res.status(200).json({ message: 'Booking approved. Customer has been notified.' })
+  } catch (err) {
+    console.error('Failed to approve booking', err)
+    res.status(500).json({ error: 'Something went wrong, please try again' })
+  }
+})
+
+// PATCH /bookings/:id/reject
+router.patch('/bookings/:id/reject', authenticate, requireApprovedBusiness, async (req, res) => {
+  const businessId = req.user?.businessId as string
+  const bookingId = Number(req.params.id as string)
+  const { ownerNotes } = req.body ?? {}
+
+  if (!Number.isInteger(bookingId)) {
+    return res.status(404).json({ error: 'Booking not found.' })
+  }
+
+  try {
+    const booking = await prisma.booking.findFirst({
+      where: { id: bookingId, businessId },
+      include: { business: { select: { name: true } } },
+    })
+
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found.' })
+    }
+    if (booking.status !== 'pending') {
+      return res.status(400).json({ error: `Only pending bookings can be rejected (current status: ${booking.status})` })
+    }
+
+    await prisma.booking.update({
+      where: { id: booking.id },
+      data: { status: 'rejected', ...(ownerNotes !== undefined && { ownerNotes }) },
+    })
+
+    const bookingDateStr = booking.bookingDate.toISOString().slice(0, 10)
+    await sendMail({
+      to: booking.customerEmail,
+      subject: `Update on your booking — ${booking.business.name}`,
+      text: `Unfortunately, your booking with ${booking.business.name} on ${bookingDateStr} at ${booking.bookingTime} was not approved.${ownerNotes ? ` Note from the business: ${ownerNotes}` : ''}`,
+    }).catch((err) => console.error('Failed to send booking rejection email', err))
+
+    res.status(200).json({ message: 'Booking rejected. Customer has been notified.' })
+  } catch (err) {
+    console.error('Failed to reject booking', err)
+    res.status(500).json({ error: 'Something went wrong, please try again' })
+  }
+})
+
+// PATCH /bookings/:id/cancel
+router.patch('/bookings/:id/cancel', authenticate, requireApprovedBusiness, async (req, res) => {
+  const businessId = req.user?.businessId as string
+  const bookingId = Number(req.params.id as string)
+  const { ownerNotes } = req.body ?? {}
+
+  if (!Number.isInteger(bookingId)) {
+    return res.status(404).json({ error: 'Booking not found.' })
+  }
+
+  try {
+    const booking = await prisma.booking.findFirst({
+      where: { id: bookingId, businessId },
+      include: { business: { select: { name: true } } },
+    })
+
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found.' })
+    }
+    if (booking.status !== 'approved') {
+      return res.status(400).json({ error: `Only approved bookings can be cancelled (current status: ${booking.status})` })
+    }
+
+    await prisma.booking.update({
+      where: { id: booking.id },
+      data: { status: 'cancelled', ...(ownerNotes !== undefined && { ownerNotes }) },
+    })
+
+    const bookingDateStr = booking.bookingDate.toISOString().slice(0, 10)
+    await sendMail({
+      to: booking.customerEmail,
+      subject: `Your booking has been cancelled — ${booking.business.name}`,
+      text: `Your booking with ${booking.business.name} on ${bookingDateStr} at ${booking.bookingTime} has been cancelled.${ownerNotes ? ` Note from the business: ${ownerNotes}` : ''}`,
+    }).catch((err) => console.error('Failed to send booking cancellation email', err))
+
+    res.status(200).json({ message: 'Booking cancelled. Customer has been notified.' })
+  } catch (err) {
+    console.error('Failed to cancel booking', err)
     res.status(500).json({ error: 'Something went wrong, please try again' })
   }
 })
