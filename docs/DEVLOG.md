@@ -1,5 +1,36 @@
 # Orbis Scheduler — Development Log
 
+## 2026-07-25 — Admin platform overview (stats, business list/detail, suspend/activate)
+
+**Shipped**
+- **"This week" decision, confirmed before writing code**: `bookingsThisWeek` in `GET /admin/stats` uses a rolling 7-day window (`now - 7 days` through `now`), not the current calendar week. Deliberately not reusing the project's existing Monday=0 week convention (`AvailabilityRule.dayOfWeek`) — that's about which day a business is open, a different concept from a trailing activity metric that shouldn't reset to near-zero every Monday morning.
+- **Confirmed understanding of the intentional cross-tenant gap**: `GET /admin/stats`, `GET /admin/businesses`, and `GET /admin/businesses/:id` have zero `businessId` scoping anywhere — admin tokens never carry one at all, so there's no tenant to scope by. This is the one legitimately unscoped part of the API, matching the already-existing `approve`/`reject` handlers and CLAUDE.md's "platform overview" framing.
+- `GET /admin/stats`: 7 platform-wide numbers (`totalBusinesses, pendingRegistrations, approvedBusinesses, rejectedBusinesses, suspendedBusinesses, totalBookingsLifetime, bookingsThisWeek`).
+- `GET /admin/businesses`: paginated (25/page), `status`/`isActive`/`search` filters (name or owner email, case-insensitive), `totalBookings` per row via Prisma's `_count` (first use of that pattern in this codebase — avoids N+1 querying in a loop).
+- `GET /admin/businesses/:id`: full detail including nested `owner: { name, email }` and `totalBookings`.
+- `PATCH /admin/businesses/:id/suspend` / `.../activate`: both require `approvalStatus === 'approved'` (pending/rejected are governed by the existing approve/reject endpoints, not these), exact "Business is already suspended" wording per the use case doc, mirrored "Business is already active" for the reverse, no email on either (explicit per the use case doc for suspend; extended the same silence to activate by inference, since every *other* email-sending endpoint in this codebase says so explicitly and this one doesn't).
+
+**Verified (curl + a DB script for independent cross-checks, live dev DB)**
+- Found **1 pre-existing business ("AF Architects") and 2 bookings already in the DB** at the start of this session — not created by any of my scripts (no timestamp-suffixed test email pattern), and a business with this exact name/owner was already logged as cleaned up once before (2026-07-02 devlog), suggesting the user manually recreated it via Postman since. Left it completely untouched rather than assuming it was safe to delete — accounted for it in baseline math instead, and confirmed after cleanup that `GET /admin/stats` returned to the *exact* pre-test baseline, proving nothing but this session's own test data was touched.
+- **Stats cross-checked two ways per number**: an independent DB script computed each of the 7 values separately from the route's own logic, and both matched exactly (5 businesses, 1 pending, 3 approved, 1 rejected, 0 suspended, 7 bookings lifetime, 6 this week). The `bookingsThisWeek` check specifically included backdating one real booking's `createdAt` to 10 days ago — confirmed it was included in the lifetime total but excluded from the 7-day count, proving the window boundary actually works rather than just returning a plausible-looking number.
+- `GET /admin/businesses` pagination shape confirmed; `totalBookings` spot-checked against every single business in the result set (not just 2-3), including the pre-existing one — all matched reality exactly.
+- All three filters confirmed individually (`status=approved` → 3, `isActive=false` → 0, name/email search both case-insensitive) and combined (`status=approved&search=...` correctly intersected, dropping a business that matched the status but not the search term).
+- `GET /admin/businesses/:id` detail shape and nested `owner` confirmed; nonexistent id → `404`.
+- Full suspend → already-suspended → activate → already-active lifecycle, plus suspend/activate attempted on pending and rejected businesses (all four correctly `400` with the current status named).
+- **Suspend's real-world effect, not just the `isActive` column**: suspended a business, then confirmed its owner's `POST /auth/login` immediately started returning `403 "Account suspended"` (previously `200`) and `GET /public/businesses/:id` immediately started returning `404` (previously `200`) — both via *existing* code paths that already read `isActive`, now genuinely exercised end-to-end rather than assumed to work from a column update alone.
+- All 5 endpoints with an owner token → `403 "Admin access required"`.
+- All 4 test businesses (and their bookings/forms/fields) deleted afterward; the pre-existing "AF Architects" data left exactly as found.
+
+**Blocking fixes**
+- Same recurring stale-port-5000-process issue as the last two sessions — caught immediately via the same `netstat`/`taskkill` check before starting, and again after `TaskStop` at the end (a `tsx`/nodemon child keeps surviving `TaskStop` across sessions; worth fixing properly at some point rather than re-diagnosing it each time).
+
+**Open questions**
+- Whether "no email on activate" was the right call — the use case doc was explicit about suspend, silent on activate. Flagged during planning as an inference, not a confirmed requirement.
+- The "AF Architects" business now has a documented, deliberate reason for existing untouched in the dev DB (this entry) — worth an actual decision at some point on whether it's real ongoing manual-testing data to keep or safe to finally clean up.
+
+**Next up**
+- The admin side of the platform is now feature-complete for MVP (approve/reject/suspend/activate/stats/list/detail). Remaining known gaps across the whole project: no frontend yet, `Booking` has no indexes beyond its PK (noted in the previous session), and the recurring stale-server-process issue above.
+
 ## 2026-07-25 — Owner-facing booking management (5 endpoints)
 
 **Shipped**
