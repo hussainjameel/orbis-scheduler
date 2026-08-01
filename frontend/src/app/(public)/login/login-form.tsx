@@ -1,136 +1,9 @@
-// "use client";
-
-// import { useState, type FormEvent } from "react";
-// import Link from "next/link";
-// import { useRouter } from "next/navigation";
-// import { Loader2 } from "lucide-react";
-// import { Button } from "@/components/ui/button";
-// import { Input } from "@/components/ui/input";
-// import { Label } from "@/components/ui/label";
-
-// const EMAIL_RULE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-// export function LoginForm({ expired }: { expired: boolean }) {
-//   const router = useRouter();
-//   const [email, setEmail] = useState("");
-//   const [password, setPassword] = useState("");
-//   const [loading, setLoading] = useState(false);
-//   const [error, setError] = useState(
-//     expired ? "Your session expired. Please sign in again." : ""
-//   );
-
-//   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
-//     e.preventDefault();
-
-//     if (!email || !password) {
-//       setError("Email and password are required.");
-//       return;
-//     }
-//     if (!EMAIL_RULE.test(email)) {
-//       setError("Enter a valid email address.");
-//       return;
-//     }
-
-//     setError("");
-//     setLoading(true);
-
-//     try {
-//       const res = await fetch("/api/auth/login", {
-//         method: "POST",
-//         headers: { "Content-Type": "application/json" },
-//         body: JSON.stringify({ email, password }),
-//       });
-//       const data = await res.json();
-
-//       if (!res.ok) {
-//         setError(data.error || "Something went wrong, please try again");
-//         setLoading(false);
-//         return;
-//       }
-
-//       router.push(data.user.role === "admin" ? "/admin" : "/dashboard");
-//     } catch {
-//       setError("Something went wrong, please try again");
-//       setLoading(false);
-//     }
-//   }
-
-//   return (
-//     <div>
-//       <h1 className="text-2xl font-medium text-text-primary">Sign in</h1>
-//       <p className="mt-1 text-sm text-text-secondary">Welcome back.</p>
-
-//       <form onSubmit={handleSubmit} noValidate className="mt-6 flex flex-col gap-4">
-//         <div>
-//           <Label htmlFor="email">Email</Label>
-//           <Input
-//             id="email"
-//             name="email"
-//             type="email"
-//             autoComplete="email"
-//             value={email}
-//             onChange={(e) => setEmail(e.target.value)}
-//             disabled={loading}
-//             className="mt-1.5 h-11 sm:h-10"
-//           />
-//         </div>
-
-//         <div>
-//           <div className="flex items-baseline justify-between">
-//             <Label htmlFor="password">Password</Label>
-//             <Link
-//               href="/forgot-password"
-//               className="text-sm text-text-primary underline underline-offset-2 hover:text-text-secondary"
-//             >
-//               <span className="sm:hidden">Forgot?</span>
-//               <span className="hidden sm:inline">Forgot password?</span>
-//             </Link>
-//           </div>
-//           <Input
-//             id="password"
-//             name="password"
-//             type="password"
-//             autoComplete="current-password"
-//             value={password}
-//             onChange={(e) => setPassword(e.target.value)}
-//             disabled={loading}
-//             className="mt-1.5 h-11 sm:h-10"
-//           />
-//         </div>
-
-//         {error && (
-//           <p
-//             role="alert"
-//             className="border-l-2 border-rejected-text bg-rejected px-3 py-2 text-sm text-rejected-text"
-//           >
-//             {error}
-//           </p>
-//         )}
-
-//         <Button type="submit" disabled={loading} className="h-11 w-full sm:h-10">
-//           {loading ? <Loader2 className="size-4 animate-spin" /> : "Sign in"}
-//         </Button>
-//       </form>
-
-//       <p className="mt-6 text-sm text-text-secondary">
-//         Don&apos;t have an account?{" "}
-//         <Link
-//           href="/register"
-//           className="text-text-primary underline underline-offset-2 hover:text-text-secondary"
-//         >
-//           Register your business
-//         </Link>
-//       </p>
-//     </div>
-//   );
-// }
-
 "use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -147,6 +20,7 @@ export function LoginForm({ expired }: { expired: boolean }) {
     expired ? "Your session expired. Please sign in again." : null
   );
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -204,24 +78,38 @@ export function LoginForm({ expired }: { expired: boolean }) {
       </div>
 
       <div className="mt-4">
-        <div className="flex items-baseline justify-between">
-          <Label htmlFor="password">Password</Label>
+        <Label htmlFor="password">Password</Label>
+        <div className="relative mt-1.5">
+          <Input
+            id="password"
+            type={showPassword ? "text" : "password"}
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="h-11 pr-10 sm:h-10"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword((v) => !v)}
+            aria-label={showPassword ? "Hide password" : "Show password"}
+            className="absolute inset-y-0 right-0 flex items-center px-3 text-text-muted hover:text-text-secondary"
+          >
+            {showPassword ? (
+              <EyeOff className="size-4" />
+            ) : (
+              <Eye className="size-4" />
+            )}
+          </button>
+        </div>
+        <div className="mt-2 text-right">
           <Link
             href="/forgot-password"
-            className="text-sm text-text-secondary underline underline-offset-2 hover:text-text-primary"
+            className="text-sm text-brand underline underline-offset-2 hover:text-brand/80"
           >
             <span className="sm:hidden">Forgot?</span>
             <span className="hidden sm:inline">Forgot password?</span>
           </Link>
         </div>
-        <Input
-          id="password"
-          type="password"
-          autoComplete="current-password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="mt-1.5 h-11 sm:h-10"
-        />
       </div>
 
       {error && (
@@ -241,11 +129,11 @@ export function LoginForm({ expired }: { expired: boolean }) {
         {loading ? <Loader2 className="size-4 animate-spin" /> : "Sign in"}
       </Button>
 
-      <p className="mt-5 text-sm text-text-secondary">
-        Don&apos;t have an account?{" "}
+      <p className="mt-5 flex flex-col items-center gap-1 text-center text-sm text-text-secondary sm:flex-row sm:justify-center">
+        <span>Don&apos;t have an account?</span>
         <Link
           href="/register"
-          className="text-text-primary underline underline-offset-2"
+          className="text-brand underline underline-offset-2 hover:text-brand/80"
         >
           Register your business
         </Link>
