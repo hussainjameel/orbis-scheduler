@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Check, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Check, Eye, EyeOff } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { LogoSpinner } from "@/components/logo";
 
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PASSWORD_SHAPE = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
@@ -242,7 +243,7 @@ export function RegisterForm() {
         disabled={loading}
         className="mt-6 h-11 w-full sm:h-10"
       >
-        {loading ? <Loader2 className="size-4 animate-spin" /> : "Create account"}
+        {loading ? <LogoSpinner className="size-4 text-brand-on" /> : "Create account"}
       </Button>
 
       <p className="mt-5 flex flex-col items-center gap-1 text-center text-sm text-text-secondary sm:flex-row sm:justify-center">

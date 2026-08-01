@@ -302,3 +302,15 @@
     }
   }
 }
+
+/*  Orbis animation for the loading spinner. 
+The two halves are animated separately so they can be different colours. */
+@keyframes orbis-half-a {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+ 
+@keyframes orbis-half-b {
+  0%, 49% { opacity: 0; }
+  50%, 100% { opacity: 1; }
+}

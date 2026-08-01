@@ -3,21 +3,41 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { LogoSpinner } from "@/components/logo";
+import { cn } from "@/lib/utils";
 
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export function LoginForm({ expired }: { expired: boolean }) {
+type Notice = { kind: "error" | "success"; message: string };
+
+function initialNotice(expired: boolean, resetSuccess: boolean): Notice | null {
+  if (expired) {
+    return { kind: "error", message: "Your session expired. Please sign in again." };
+  }
+  if (resetSuccess) {
+    return { kind: "success", message: "Your password has been updated. Please sign in." };
+  }
+  return null;
+}
+
+export function LoginForm({
+  expired,
+  resetSuccess,
+}: {
+  expired: boolean;
+  resetSuccess: boolean;
+}) {
   const router = useRouter();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(
-    expired ? "Your session expired. Please sign in again." : null
+  const [notice, setNotice] = useState<Notice | null>(() =>
+    initialNotice(expired, resetSuccess)
   );
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -27,15 +47,15 @@ export function LoginForm({ expired }: { expired: boolean }) {
 
     // Structural checks only — anything with real logic round-trips.
     if (!email.trim() || !password) {
-      setError("Enter your email and password.");
+      setNotice({ kind: "error", message: "Enter your email and password." });
       return;
     }
     if (!EMAIL_SHAPE.test(email)) {
-      setError("Enter a valid email address.");
+      setNotice({ kind: "error", message: "Enter a valid email address." });
       return;
     }
 
-    setError(null);
+    setNotice(null);
     setLoading(true);
 
     try {
@@ -48,14 +68,17 @@ export function LoginForm({ expired }: { expired: boolean }) {
 
       if (!res.ok) {
         // Includes 403 business-status messages, shown verbatim.
-        setError(data.error ?? "Something went wrong. Please try again.");
+        setNotice({
+          kind: "error",
+          message: data.error ?? "Something went wrong. Please try again.",
+        });
         setLoading(false);
         return;
       }
 
       router.push(data.user?.role === "admin" ? "/admin" : "/dashboard");
     } catch {
-      setError("Could not reach the server. Please try again.");
+      setNotice({ kind: "error", message: "Could not reach the server. Please try again." });
       setLoading(false);
     }
   }
@@ -112,12 +135,17 @@ export function LoginForm({ expired }: { expired: boolean }) {
         </div>
       </div>
 
-      {error && (
+      {notice && (
         <p
-          role="alert"
-          className="mt-4 border-l-2 border-rejected-text bg-rejected px-3 py-2 text-sm text-rejected-text"
+          role={notice.kind === "error" ? "alert" : "status"}
+          className={cn(
+            "mt-4 border-l-2 px-3 py-2 text-sm",
+            notice.kind === "error"
+              ? "border-rejected-text bg-rejected text-rejected-text"
+              : "border-approved-text bg-approved text-approved-text"
+          )}
         >
-          {error}
+          {notice.message}
         </p>
       )}
 
@@ -126,7 +154,7 @@ export function LoginForm({ expired }: { expired: boolean }) {
         disabled={loading}
         className="mt-5 h-11 w-full sm:h-10"
       >
-        {loading ? <Loader2 className="size-4 animate-spin" /> : "Sign in"}
+        {loading ? <LogoSpinner className="size-4 text-brand-on" /> : "Sign in"}
       </Button>
 
       <p className="mt-5 flex flex-col items-center gap-1 text-center text-sm text-text-secondary sm:flex-row sm:justify-center">

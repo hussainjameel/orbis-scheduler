@@ -30,3 +30,33 @@ export function Logo({ className }: { className?: string }) {
     </span>
   );
 }
+
+/**
+ * Loading indicator. The two halves of the mark alternate, so it reads as
+ * one shape turning rather than a fade. Same path drawn twice with the arc
+ * reversed; the animations are offset by half a cycle.
+ *
+ * Only use where something is genuinely in flight — it must stop when the
+ * thing it indicates finishes. Reduced-motion is honoured globally by the
+ * base layer, which drops the animation to zero.
+ */
+export function LogoSpinner({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 32 32"
+      fill="currentColor"
+      role="status"
+      aria-label="Loading"
+      className={cn("size-6 text-brand", className)}
+    >
+      <path
+        className="animate-[orbis-half-a_800ms_steps(1)_infinite]"
+        d="M 16 16 L 22.5 4.74 A 13 13 0 0 1 9.5 27.26 Z"
+      />
+      <path
+        className="animate-[orbis-half-b_800ms_steps(1)_infinite]"
+        d="M 16 16 L 9.5 27.26 A 13 13 0 0 1 22.5 4.74 Z"
+      />
+    </svg>
+  );
+}
