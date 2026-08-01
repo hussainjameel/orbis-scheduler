@@ -1,5 +1,11 @@
 # Orbis Scheduler — Development Log
 
+## 2026-08-01 — Forgot / Reset PAssword Screens Completed
+
+
+## 2026-07-31 — Sign In / Sign Up Screens Completed
+
+
 ## 2026-07-25 — Admin platform overview (stats, business list/detail, suspend/activate)
 
 **Shipped**
