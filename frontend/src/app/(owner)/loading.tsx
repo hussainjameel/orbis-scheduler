@@ -1,4 +1,3 @@
-// src/app/(owner)/dashboard/loading.tsx
 import { LogoSpinner } from "@/components/logo";
 
 export default function Loading() {
