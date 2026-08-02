@@ -1,5 +1,90 @@
 # Orbis Scheduler — Development Log
 
+<<<<<<< HEAD
+
+## 2026-08-01 — Frontend: login, register, forgot/reset-password screens
+
+**Shipped**
+- `frontend/src/lib/api.ts`: `apiFetch<T>()`, the one place server-side code calls the Express backend. Reads the `token` httpOnly cookie, attaches it as `Authorization: Bearer`, and on a `401` hard-redirects to `/login?expired=1` — a `403` is deliberately left for the caller to handle inline, since business-status 403s (pending/rejected/suspended) carry a message that needs to render on the page, not vanish into a redirect.
+- Five Next.js route handlers under `frontend/src/app/api/auth/`, each proxying one backend `/auth` endpoint from the browser rather than calling Express directly (session decision 9: JWT lives in an httpOnly cookie set by Next.js, never touched by client JS):
+  - `login`: on success, sets the `token` cookie (`httpOnly`, `sameSite: lax`, `secure` in production, 24h `maxAge` — matched to the backend JWT's own expiry) and returns only `{ user }`.
+  - `register`, `forgot-password`, `reset-password`: pass the backend's response (body + status) straight through, no cookie — none of these three log the user in. `forgot-password`'s handler doesn't even look at the response body before proxying it, so it can't accidentally branch on account-existence and undermine the backend's enumeration-safe design.
+  - `logout`: exists solely because client JS can't delete an `httpOnly` cookie itself — clears it server-side.
+- Four client forms (`login-form.tsx`, `register-form.tsx`, `forgot-password-form.tsx`, `reset-password-form.tsx`), all following the same shape: client-side checks are structural only (non-empty, email/password regex shape) and every message with real logic — wrong credentials, duplicate email, expired token — round-trips to the backend and is shown verbatim rather than re-implemented in JS. `reset-password-form.tsx` is the one exception: password-confirmation matching is checked client-side because the server only ever receives one password field and structurally can't perform that check.
+- `reset-password`'s page reads `?token=` server-side and renders `InvalidResetLink` immediately if it's missing, before the form ever mounts — a tokenless load can only ever fail, so the failure state is shown directly. The form itself also swaps to `InvalidResetLink` (rather than an inline error) if the backend later reports the token invalid/expired, since a dead token makes the form pointless to keep showing.
+- Route groups `(public)`, `(owner)`, `(admin)` created with layout files; `(owner)`/`(admin)` layouts are explicit stubs (`// Owner auth guard goes here (decision 10: enforced in layout, not middleware)`) — no guard logic exists yet, so nothing under those groups is access-controlled yet.
+- `components/logo.tsx`: `LogoMark`, `Logo`, and `LogoSpinner` (two half-paths cross-fading via offset `steps(1)` animations, honouring `prefers-reduced-motion` through the base layer) — shared across every auth screen and used as the submit-button loading state.
+- Both auth-screen layouts (login, register, forgot/reset-password) use the same split-panel structure: a fixed-width dark brand panel + a centered `max-w-[380px]` form column, collapsing to stacked on mobile.
+
+**Verified (this session — code review + `npm run build`, not a live-session QA log)**
+- These commits (`7d52e59`, `c8e0a8d`, `f87eac6`) predate this devlog entry and weren't accompanied by recorded manual test notes at the time, so "Verified" here reflects this session's review rather than the original build session.
+- `npm run build` (Next.js 16 / Turbopack) compiles cleanly and TypeScript passes with no errors.
+- The build's route table confirms exactly what's actually reachable: `/`, `/login`, `/register`, `/forgot-password`, `/reset-password`, plus the 5 `/api/auth/*` handlers. No `/dashboard` or any `(owner)`/`(admin)` route exists yet (see open question below).
+- Read through all four forms and the 5 route handlers directly: confirmed the cookie is `httpOnly` on login only, confirmed `forgot-password`'s handler never branches on the backend's response body, confirmed `reset-password`'s `400` path swaps to `InvalidResetLink` rather than an inline error.
+
+**Blocking fixes**
+- None recorded.
+
+**Open questions**
+- `frontend/src/app/(owner)/dashboard.tsx` is dead code: its own header comment reads `// src/app/(owner)/dashboard/loading.tsx`, but the file is actually saved one level up, as `(owner)/dashboard.tsx` — not a valid Next.js file name in that position, and confirmed by the build's route table to produce no route at all. Looks like a misplaced file from starting the dashboard screen; needs moving to `(owner)/dashboard/loading.tsx` (or a real `dashboard/page.tsx` built alongside it) before the owner area has anything to show.
+- Root `CLAUDE.md`'s "Frontend" section still says the frontend is "scaffolded but has no screens yet" and that the `(public)`/`(owner)`/`(admin)` route groups are "Not yet built" — stale as of this and the previous entry; worth a follow-up update alongside this devlog entry.
+- No auth guards exist in the `(owner)`/`(admin)` layouts yet (both are literal TODO stubs) — anything routed under those groups today would render with no access control at all, though nothing is routed there yet.
+
+**Next up**
+- The owner and admin auth guards (decision 10), then the owner dashboard/profile/availability/form-builder/bookings screens and the admin platform screens — the backend endpoints for all of these have been feature-complete since 2026-07-25. The public business booking page (the only unauthenticated screen besides the ones shipped here) is also still unbuilt.
+
+## 2026-07-31 — Frontend scaffold: Next.js 16 + Tailwind v4 design system + shadcn/ui
+
+**Shipped**
+- Next.js 16 (App Router, `src/` directory, TypeScript, Turbopack) initialized in `frontend/`, alongside the two governing spec PDFs (`Orbis_Scheduler_Frontend_Specification.pdf`, `Orbis_Scheduler_Design_Specification.pdf`) checked into `docs/`.
+- Tailwind v4 wired entirely through `globals.css` (no `tailwind.config.ts` — v4 moved configuration into CSS): `:root`/`.dark` raw token values plus an `@theme inline { }` block that turns them into utilities. The `inline` keyword is load-bearing — without it, a utility resolves its `var()` at build time and dark mode silently stops working. Dark mode itself is class-based (`@custom-variant dark (&:where(.dark, .dark *))`), overriding v4's default `prefers-color-scheme` behaviour so a manual toggle is possible later.
+- Full design-system token set added per the design spec: `surface-0/1/2`, `border-default/strong`, `text-primary/secondary/muted/disabled`, `brand`/`brand-on`/`brand-subtle`, and the four status pairs (`pending`, `approved`, `rejected`, `cancelled`, each with a `-text` variant).
+- shadcn/ui initialized on Base UI primitives, components copied into `src/components/ui/` (not installed as a dependency — no `shadcn` package in `package.json`, so they're ordinary editable source). `button.tsx` customized on add: radius forced to `rounded-sm` (6px per spec, overriding shadcn's default across every size variant) and the off-scale `text-[0.8rem]` replaced with `text-sm` to stay on the project's five-size type scale. shadcn's own tokens (`--primary`, `--card`, `--accent`, etc.) are mapped to the project tokens so components inherit the palette automatically — `--accent` in particular is called out as shadcn's neutral hover colour, not the brand orange, to avoid future confusion.
+- DM Sans loaded via `next/font/google` for UI text, Geist Mono for code.
+- Root `CLAUDE.md` rewritten to cover both apps: backend architecture/conventions consolidated from the old `backend/CLAUDE.md`, plus a new Frontend section (stack, Tailwind v4's CSS-based config, token usage rules, shadcn conventions, planned route-group structure, session-handling decision) and a repo-wide "Working practices" section formalizing the devlog/`FUTURE_IMPROVEMENTS.md` update habit already in use.
+
+**Verified (this session — code review + `npm run build`, not a live-session QA log)**
+- `npm run build` compiles cleanly on the current tree (see the 2026-08-01 entry above for the full route table), confirming the base scaffold, token wiring, and `button.tsx` customization all still build correctly together with the screens added on top of them.
+
+**Blocking fixes**
+- None recorded.
+
+**Open questions**
+- None recorded from this session.
+
+**Next up**
+- Auth screens (login/register/forgot-password/reset-password) consuming `POST /auth/*` — shipped same week, see the entry above.
+
+=======
+## 2026-08-03 — Owner dashboard shell: auth guard, sidebar, mobile nav
+
+**Shipped**
+- **Small backend addition, resolved during planning**: `GET /owner/business` had no way to expose the logged-in owner's own account email — it returns business fields only, and the JWT payload carries `{ userId, role, businessId }`, no email. Added `owner: { name, email }` to the response, joining `Business.userId → User` the same way `GET /admin/businesses/:id` already does, then restructuring the same way that route does (`select` the relation as `user`, rename to `owner` on the way out) rather than inventing a second pattern for the same shape.
+- `frontend/src/lib/session.ts`: `getSession()`, a server-only helper that reads the `token` cookie and verifies it with `jsonwebtoken` — the exact same library and secret `backend/src/middleware/authenticate.ts` uses, added as a new frontend dependency with `JWT_SECRET` copied into `frontend/.env.local` (gitignored, value never printed to the terminal). Payload is runtime-checked with the same shape guard as the backend's `isAuthenticatedUserPayload`, so a validly-signed-but-wrong-shape token is treated as no session rather than trusted. Verification happens in the layout (Server Component), not middleware — Next's middleware runtime can't run `jsonwebtoken`, and a second verification library would drift from the first.
+- `frontend/src/app/(owner)/layout.tsx`: the real guard, replacing the `// Owner auth guard goes here` stub. No session → `redirect("/login")`. Session present but `role !== "owner"` → silent `redirect("/admin")` — a valid session on the wrong role's routes is treated as an accidental visit, not an error. Otherwise calls `apiFetch("/owner/business")` — a `401` never reaches this layout at all, since `apiFetch` already hard-redirects to `/login?expired=1` internally; a `403` from `requireApprovedBusiness` (pending/rejected/suspended) is caught specifically and rendered as a full-page status screen with the backend's message and `reason` (if any) verbatim, plus a sign-out button, instead of rendering `children` at all — a broken dashboard behind a working shell would be worse than an honest blocked screen. Any other error is left to propagate.
+- `frontend/src/components/owner-sidebar.tsx` (desktop, `hidden sm:flex`) and `owner-mobile-nav.tsx` (`sm:hidden`, fixed header + fixed bottom bar), both consuming only theme tokens (confirmed via `grep` — zero raw hex/`rgb()` values in any new file). Sidebar collapse state and the shared `useTheme` hook (`frontend/src/hooks/use-theme.ts`) both read `localStorage`/`matchMedia` inside a `useEffect` rather than a lazy initial state, since neither API exists during the server render each hydrates from — accepted brief first-paint flash on both rather than adding an inline anti-flash script. `npm run lint` initially flagged both as `react-hooks/set-state-in-effect`; this is the correct pattern for a browser-only read that must not cause a hydration mismatch, so both got a one-line `eslint-disable` with the reasoning inline rather than a workaround that would reintroduce the mismatch.
+- Collapsed sidebar uses shadcn's `Tooltip` (via Base UI's `render` prop, e.g. `<TooltipTrigger render={row} />`) per icon; mobile header menu uses shadcn's `DropdownMenu` over `Sheet` — chosen since its content is three short rows, not a browsable panel. Both newly added via `npx shadcn@latest add`, following the project's existing "copied source, not a package" convention.
+- `frontend/src/components/sign-out-button.tsx` and `theme-toggle.tsx`: shared by both nav variants and the blocked-status screen, so the logout/theme logic exists once each.
+- `frontend/src/app/(owner)/loading.tsx` (a real one — a stray, non-functional `(owner)/dashboard.tsx` existed on disk with a header comment claiming it belonged at `dashboard/loading.tsx`; confirmed dead via the build's route table before this session, now deleted and replaced with the genuine file at the genuine path) and `frontend/src/app/(owner)/dashboard/bookings/page.tsx` (heading only, per the task).
+- `backend/scripts/setApprovalStatus.ts` (new, gitignored, matches `listOwners.ts`/`deleteTestUsers.ts`'s existing local-only-tooling convention): flips a business's `approvalStatus` directly, needed because there's no API path back to `pending` once a business has been approved/rejected once — the only way to verify the guard's pending-state screen against a still-valid token.
+
+**Verified**
+- `npm run build` and `npm run lint`: both clean; the build's route table now lists a real `/dashboard/bookings` where none existed before this session.
+- Backend: re-ran the full pending/rejected/suspended/admin-token/PATCH regression suite from the 2026-07-07 devlog entry against the changed `GET /owner/business` handler — all four 403 wordings unchanged, `PATCH` still works and still excludes raw `userId`. New `owner.name`/`owner.email` fields confirmed against a real `User` row.
+- Frontend guard, via `curl` with a `Cookie: token=...` header directly against `http://localhost:3000/dashboard/bookings` (a live dev server, not just the build): no cookie → `307` to `/login`; admin token → `307` to `/admin`; approved owner token → `200` with the business name, owner email, and mobile bottom-bar labels all present in the server-rendered HTML. Pending, rejected, and suspended states each tested by minting an owner token while the business was still approved, then flipping `approvalStatus`/`isActive` directly via the new script (same "still-valid stale token" technique every prior `requireApprovedBusiness` verification in this devlog has used) — all three produced the exact backend wording (`"...still under review..."`, `"Your registration was not approved"` + `Reason: <text>`, `"Account suspended"`), confirmed by inspecting the raw HTML around each match rather than trusting a first-pass `grep` (the rejected reason's match initially looked empty because React's SSR inserts an empty `<!-- -->` comment between the label and the value text nodes — confirmed it renders as plain readable text, not a real gap).
+- All test data (2 businesses, 2 users, their forms/fields) deleted afterward via a throwaway cleanup script (removed after running, unlike the kept `setApprovalStatus.ts`).
+
+**Blocking fixes**
+- The backend dev server on port 5000 was a stale process from an earlier session — file edits weren't being picked up despite `nodemon --exec tsx` supposedly watching. Same recurring issue as several prior sessions; diagnosed via `netstat`/`Get-CimInstance Win32_Process`, killed, restarted clean. The frontend dev server also needed a restart mid-session, unrelated to staleness — adding `JWT_SECRET` to `.env.local` requires a fresh process, since Next only reads env files at startup.
+
+**Open questions**
+- **No browser or screenshot tool was available in this environment**, so the collapse toggle, theme toggle, tooltips, dropdown menu open/close, and the actual mobile-breakpoint layout switch were verified by code review and `curl`-based HTML inspection only — not by clicking through a rendered page. Dark mode specifically was verified structurally (every new component uses only theme tokens already defined for both modes in `globals.css`, confirmed via `grep` to contain zero raw colour values) rather than visually. This falls short of "verify both modes before calling it done" in the literal, visual sense — worth an actual look in a real browser next session before treating this shell as fully signed off.
+- The recurring stale-backend-process issue (this entry and at least three prior ones) still isn't root-caused — worth investigating properly at some point instead of re-diagnosing it each session.
+
+**Next up**
+- Business Profile screen (`/dashboard/profile`) — the first real screen to sit inside this shell. Availability and the Form Builder after that. The `(admin)/layout.tsx` guard is still an identical stub to what `(owner)/layout.tsx` was before this session — needed before `/admin` (the redirect target for a wrong-role owner-shell visit) is anything but a 404.
+>>>>>>> backend
+
 ## 2026-07-25 — Admin platform overview (stats, business list/detail, suspend/activate)
 
 **Shipped**

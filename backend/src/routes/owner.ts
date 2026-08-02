@@ -38,6 +38,7 @@ router.get('/business', authenticate, requireApprovedBusiness, async (req, res) 
         approvalStatus: true,
         rejectionReason: true,
         createdAt: true,
+        user: { select: { name: true, email: true } },
       },
     })
 
@@ -45,7 +46,8 @@ router.get('/business', authenticate, requireApprovedBusiness, async (req, res) 
       return res.status(404).json({ error: 'Business not found.' })
     }
 
-    res.status(200).json({ business })
+    const { user, ...rest } = business
+    res.status(200).json({ business: { ...rest, owner: user } })
   } catch (err) {
     console.error('Failed to fetch business profile', err)
     res.status(500).json({ error: 'Something went wrong, please try again' })
