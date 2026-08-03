@@ -95,13 +95,13 @@ export function OwnerSidebar({
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "relative flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm transition-colors",
-                  collapsed && "justify-center px-0",
+                  "relative flex items-center rounded-sm transition-colors",
+                  collapsed ? "mx-auto size-10 justify-center" : "gap-2 px-2 py-2 text-base",
                   active ? "bg-brand-subtle font-medium text-text-primary" : "text-text-secondary hover:bg-surface-2"
                 )}
               >
                 <Icon
-                  className={cn("size-4 shrink-0", active ? "text-brand" : "text-text-muted")}
+                  className={cn("size-5 shrink-0", active ? "text-brand" : "text-text-muted")}
                   strokeWidth={1.5}
                 />
                 {!collapsed && <span className="flex-1">{item.label}</span>}
@@ -155,7 +155,7 @@ export function OwnerSidebar({
           <Tooltip>
             <TooltipTrigger
               render={
-                <div className="flex size-7 items-center justify-center rounded-full bg-text-primary text-xs font-medium text-surface-0">
+                <div className="flex size-8 items-center justify-center rounded-full bg-text-primary text-xs font-medium text-surface-0">
                   {initial}
                 </div>
               }
@@ -166,14 +166,20 @@ export function OwnerSidebar({
           </Tooltip>
         ) : (
           <div className="px-2">
-            <p className="truncate text-xs font-medium text-text-primary">{businessName}</p>
+            <p className="truncate text-sm font-medium text-text-primary">{businessName}</p>
             <p className="truncate text-xs text-text-muted">{ownerEmail}</p>
           </div>
         )}
 
         <div className={cn("mt-3 flex flex-col gap-1", collapsed && "items-center")}>
-          <ThemeToggle iconOnly={collapsed} />
-          <SignOutButton iconOnly={collapsed} />
+          <ThemeToggle
+            iconOnly={collapsed}
+            className={cn("[&>svg]:size-5", !collapsed && "px-2 py-2 text-base")}
+          />
+          <SignOutButton
+            iconOnly={collapsed}
+            className={cn("[&>svg]:size-5", !collapsed && "px-2 py-2 text-base")}
+          />
         </div>
       </aside>
     </TooltipProvider>
