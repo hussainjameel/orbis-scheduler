@@ -1,5 +1,27 @@
 # Orbis Scheduler — Development Log
 
+## 2026-08-03 — `GET /owner/bookings`: status `counts` for filter pills
+
+**Shipped**
+- `GET /owner/bookings` (`backend/src/routes/owner.ts`) now returns a `counts: { pending, approved, rejected, cancelled, all }` object alongside the existing `bookings`/`total`/`page`/`totalPages`, so the frontend can populate all five filter pills from one call instead of five.
+- `counts` is produced by a single `prisma.booking.groupBy({ by: ['status'], ... })` — the first use of `groupBy` in this codebase — reduced into a fixed-shape object seeded with all four statuses at `0` so a status with no rows still appears as `0`, never an absent key. `all` is the sum of the four, computed in code rather than trusting the DB to return a total row.
+- The search condition (`customerName`/`customerEmail` case-insensitive `contains`) was factored out of `where` into a shared `searchFilter`, reused by both the list's `where` (which also applies `status`) and a separate `countsWhere` (`businessId` + `searchFilter` only, **no** `status`) — this is what keeps the inactive pills non-zero when a status filter is active, per the requirement that filtering to `pending` must still return all five real counts, not just `pending`'s.
+- All three queries (`findMany`, `count`, `groupBy`) run in the same `Promise.all` as before, so this adds one query round-trip, not three sequential ones.
+
+**Verified (curl + a throwaway gitignored seed/cleanup script, live dev DB)**
+- Registered two fresh businesses through the real `POST /auth/register` (approved directly via the existing `setApprovalStatus.ts`-style DB write, matching that script's established technique), then inserted bookings directly via Prisma with a known status distribution per business — 7 pending + 3 approved + 2 rejected + 1 cancelled + 2 more pending named "Zelda" on business A (15 total), 5 pending + 1 approved on business B (6 total, isolated cross-tenant fixture). Distinct `bookingTime`s per row were required to avoid colliding with the pre-existing partial unique index on `(businessId, bookingDate, bookingTime)`.
+- Unfiltered `GET /owner/bookings` on business A: `counts` exactly `{ pending: 9, approved: 3, rejected: 2, cancelled: 1, all: 15 }`, matching the fixture precisely.
+- `?status=pending` and `?status=approved`: `bookings` correctly narrowed (9 and 3 rows respectively, single status each), but `counts` **unchanged** in both cases — directly confirms the pill-zeroing bug this task exists to prevent.
+- `?search=zelda` (no status): `bookings` narrowed to the 2 Zelda rows, `counts` narrowed to `{ pending: 2, approved: 0, rejected: 0, cancelled: 0, all: 2 }` — search does narrow counts, unlike status.
+- `?search=zelda&status=approved` together: `bookings` empty (0 Zelda rows are `approved`) while `counts` stayed at the search-narrowed `{ pending: 2, ... }` — proves search and status are applied independently to `countsWhere` vs. `where`, not both dropped or both applied.
+- `?search=` with no matches: every count key present and `0`, `all: 0` — confirms the "must return 0, not be absent" requirement even in the fully-empty case, not just the partially-empty one.
+- Business B's counts (`{ pending: 5, approved: 1, rejected: 0, cancelled: 0, all: 6 }`) stayed fully isolated from business A's — cross-tenant scoping unaffected by the new query.
+- Re-ran the untouched parts of the existing suite against the changed handler: case-insensitive email search (uppercase search term matched a stored lowercase email), invalid `?status=` → `400` unchanged wording, `?page=0` → `400` unchanged, `?page=2` beyond the last page → empty `bookings` with `total`/`totalPages`/`counts` all still correct, no-token request → `401` unchanged.
+- All test data (2 businesses, 2 users, 21 bookings) and the throwaway seed/cleanup scripts deleted afterward; confirmed zero matching test users remained.
+
+**Next up**
+- No other endpoints touched. Frontend bookings screen can now wire the five pills to `counts` in one round trip once that work starts.
+
 ## 2026-08-03 — Owner dashboard shell: auth guard, sidebar, mobile nav
 
 **Shipped**
