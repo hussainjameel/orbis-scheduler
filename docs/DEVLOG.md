@@ -1,61 +1,27 @@
 # Orbis Scheduler — Development Log
 
-<<<<<<< HEAD
-
-## 2026-08-01 — Frontend: login, register, forgot/reset-password screens
+## 2026-08-03 — `GET /owner/bookings`: status `counts` for filter pills
 
 **Shipped**
-- `frontend/src/lib/api.ts`: `apiFetch<T>()`, the one place server-side code calls the Express backend. Reads the `token` httpOnly cookie, attaches it as `Authorization: Bearer`, and on a `401` hard-redirects to `/login?expired=1` — a `403` is deliberately left for the caller to handle inline, since business-status 403s (pending/rejected/suspended) carry a message that needs to render on the page, not vanish into a redirect.
-- Five Next.js route handlers under `frontend/src/app/api/auth/`, each proxying one backend `/auth` endpoint from the browser rather than calling Express directly (session decision 9: JWT lives in an httpOnly cookie set by Next.js, never touched by client JS):
-  - `login`: on success, sets the `token` cookie (`httpOnly`, `sameSite: lax`, `secure` in production, 24h `maxAge` — matched to the backend JWT's own expiry) and returns only `{ user }`.
-  - `register`, `forgot-password`, `reset-password`: pass the backend's response (body + status) straight through, no cookie — none of these three log the user in. `forgot-password`'s handler doesn't even look at the response body before proxying it, so it can't accidentally branch on account-existence and undermine the backend's enumeration-safe design.
-  - `logout`: exists solely because client JS can't delete an `httpOnly` cookie itself — clears it server-side.
-- Four client forms (`login-form.tsx`, `register-form.tsx`, `forgot-password-form.tsx`, `reset-password-form.tsx`), all following the same shape: client-side checks are structural only (non-empty, email/password regex shape) and every message with real logic — wrong credentials, duplicate email, expired token — round-trips to the backend and is shown verbatim rather than re-implemented in JS. `reset-password-form.tsx` is the one exception: password-confirmation matching is checked client-side because the server only ever receives one password field and structurally can't perform that check.
-- `reset-password`'s page reads `?token=` server-side and renders `InvalidResetLink` immediately if it's missing, before the form ever mounts — a tokenless load can only ever fail, so the failure state is shown directly. The form itself also swaps to `InvalidResetLink` (rather than an inline error) if the backend later reports the token invalid/expired, since a dead token makes the form pointless to keep showing.
-- Route groups `(public)`, `(owner)`, `(admin)` created with layout files; `(owner)`/`(admin)` layouts are explicit stubs (`// Owner auth guard goes here (decision 10: enforced in layout, not middleware)`) — no guard logic exists yet, so nothing under those groups is access-controlled yet.
-- `components/logo.tsx`: `LogoMark`, `Logo`, and `LogoSpinner` (two half-paths cross-fading via offset `steps(1)` animations, honouring `prefers-reduced-motion` through the base layer) — shared across every auth screen and used as the submit-button loading state.
-- Both auth-screen layouts (login, register, forgot/reset-password) use the same split-panel structure: a fixed-width dark brand panel + a centered `max-w-[380px]` form column, collapsing to stacked on mobile.
+- `GET /owner/bookings` (`backend/src/routes/owner.ts`) now returns a `counts: { pending, approved, rejected, cancelled, all }` object alongside the existing `bookings`/`total`/`page`/`totalPages`, so the frontend can populate all five filter pills from one call instead of five.
+- `counts` is produced by a single `prisma.booking.groupBy({ by: ['status'], ... })` — the first use of `groupBy` in this codebase — reduced into a fixed-shape object seeded with all four statuses at `0` so a status with no rows still appears as `0`, never an absent key. `all` is the sum of the four, computed in code rather than trusting the DB to return a total row.
+- The search condition (`customerName`/`customerEmail` case-insensitive `contains`) was factored out of `where` into a shared `searchFilter`, reused by both the list's `where` (which also applies `status`) and a separate `countsWhere` (`businessId` + `searchFilter` only, **no** `status`) — this is what keeps the inactive pills non-zero when a status filter is active, per the requirement that filtering to `pending` must still return all five real counts, not just `pending`'s.
+- All three queries (`findMany`, `count`, `groupBy`) run in the same `Promise.all` as before, so this adds one query round-trip, not three sequential ones.
 
-**Verified (this session — code review + `npm run build`, not a live-session QA log)**
-- These commits (`7d52e59`, `c8e0a8d`, `f87eac6`) predate this devlog entry and weren't accompanied by recorded manual test notes at the time, so "Verified" here reflects this session's review rather than the original build session.
-- `npm run build` (Next.js 16 / Turbopack) compiles cleanly and TypeScript passes with no errors.
-- The build's route table confirms exactly what's actually reachable: `/`, `/login`, `/register`, `/forgot-password`, `/reset-password`, plus the 5 `/api/auth/*` handlers. No `/dashboard` or any `(owner)`/`(admin)` route exists yet (see open question below).
-- Read through all four forms and the 5 route handlers directly: confirmed the cookie is `httpOnly` on login only, confirmed `forgot-password`'s handler never branches on the backend's response body, confirmed `reset-password`'s `400` path swaps to `InvalidResetLink` rather than an inline error.
-
-**Blocking fixes**
-- None recorded.
-
-**Open questions**
-- `frontend/src/app/(owner)/dashboard.tsx` is dead code: its own header comment reads `// src/app/(owner)/dashboard/loading.tsx`, but the file is actually saved one level up, as `(owner)/dashboard.tsx` — not a valid Next.js file name in that position, and confirmed by the build's route table to produce no route at all. Looks like a misplaced file from starting the dashboard screen; needs moving to `(owner)/dashboard/loading.tsx` (or a real `dashboard/page.tsx` built alongside it) before the owner area has anything to show.
-- Root `CLAUDE.md`'s "Frontend" section still says the frontend is "scaffolded but has no screens yet" and that the `(public)`/`(owner)`/`(admin)` route groups are "Not yet built" — stale as of this and the previous entry; worth a follow-up update alongside this devlog entry.
-- No auth guards exist in the `(owner)`/`(admin)` layouts yet (both are literal TODO stubs) — anything routed under those groups today would render with no access control at all, though nothing is routed there yet.
+**Verified (curl + a throwaway gitignored seed/cleanup script, live dev DB)**
+- Registered two fresh businesses through the real `POST /auth/register` (approved directly via the existing `setApprovalStatus.ts`-style DB write, matching that script's established technique), then inserted bookings directly via Prisma with a known status distribution per business — 7 pending + 3 approved + 2 rejected + 1 cancelled + 2 more pending named "Zelda" on business A (15 total), 5 pending + 1 approved on business B (6 total, isolated cross-tenant fixture). Distinct `bookingTime`s per row were required to avoid colliding with the pre-existing partial unique index on `(businessId, bookingDate, bookingTime)`.
+- Unfiltered `GET /owner/bookings` on business A: `counts` exactly `{ pending: 9, approved: 3, rejected: 2, cancelled: 1, all: 15 }`, matching the fixture precisely.
+- `?status=pending` and `?status=approved`: `bookings` correctly narrowed (9 and 3 rows respectively, single status each), but `counts` **unchanged** in both cases — directly confirms the pill-zeroing bug this task exists to prevent.
+- `?search=zelda` (no status): `bookings` narrowed to the 2 Zelda rows, `counts` narrowed to `{ pending: 2, approved: 0, rejected: 0, cancelled: 0, all: 2 }` — search does narrow counts, unlike status.
+- `?search=zelda&status=approved` together: `bookings` empty (0 Zelda rows are `approved`) while `counts` stayed at the search-narrowed `{ pending: 2, ... }` — proves search and status are applied independently to `countsWhere` vs. `where`, not both dropped or both applied.
+- `?search=` with no matches: every count key present and `0`, `all: 0` — confirms the "must return 0, not be absent" requirement even in the fully-empty case, not just the partially-empty one.
+- Business B's counts (`{ pending: 5, approved: 1, rejected: 0, cancelled: 0, all: 6 }`) stayed fully isolated from business A's — cross-tenant scoping unaffected by the new query.
+- Re-ran the untouched parts of the existing suite against the changed handler: case-insensitive email search (uppercase search term matched a stored lowercase email), invalid `?status=` → `400` unchanged wording, `?page=0` → `400` unchanged, `?page=2` beyond the last page → empty `bookings` with `total`/`totalPages`/`counts` all still correct, no-token request → `401` unchanged.
+- All test data (2 businesses, 2 users, 21 bookings) and the throwaway seed/cleanup scripts deleted afterward; confirmed zero matching test users remained.
 
 **Next up**
-- The owner and admin auth guards (decision 10), then the owner dashboard/profile/availability/form-builder/bookings screens and the admin platform screens — the backend endpoints for all of these have been feature-complete since 2026-07-25. The public business booking page (the only unauthenticated screen besides the ones shipped here) is also still unbuilt.
+- No other endpoints touched. Frontend bookings screen can now wire the five pills to `counts` in one round trip once that work starts.
 
-## 2026-07-31 — Frontend scaffold: Next.js 16 + Tailwind v4 design system + shadcn/ui
-
-**Shipped**
-- Next.js 16 (App Router, `src/` directory, TypeScript, Turbopack) initialized in `frontend/`, alongside the two governing spec PDFs (`Orbis_Scheduler_Frontend_Specification.pdf`, `Orbis_Scheduler_Design_Specification.pdf`) checked into `docs/`.
-- Tailwind v4 wired entirely through `globals.css` (no `tailwind.config.ts` — v4 moved configuration into CSS): `:root`/`.dark` raw token values plus an `@theme inline { }` block that turns them into utilities. The `inline` keyword is load-bearing — without it, a utility resolves its `var()` at build time and dark mode silently stops working. Dark mode itself is class-based (`@custom-variant dark (&:where(.dark, .dark *))`), overriding v4's default `prefers-color-scheme` behaviour so a manual toggle is possible later.
-- Full design-system token set added per the design spec: `surface-0/1/2`, `border-default/strong`, `text-primary/secondary/muted/disabled`, `brand`/`brand-on`/`brand-subtle`, and the four status pairs (`pending`, `approved`, `rejected`, `cancelled`, each with a `-text` variant).
-- shadcn/ui initialized on Base UI primitives, components copied into `src/components/ui/` (not installed as a dependency — no `shadcn` package in `package.json`, so they're ordinary editable source). `button.tsx` customized on add: radius forced to `rounded-sm` (6px per spec, overriding shadcn's default across every size variant) and the off-scale `text-[0.8rem]` replaced with `text-sm` to stay on the project's five-size type scale. shadcn's own tokens (`--primary`, `--card`, `--accent`, etc.) are mapped to the project tokens so components inherit the palette automatically — `--accent` in particular is called out as shadcn's neutral hover colour, not the brand orange, to avoid future confusion.
-- DM Sans loaded via `next/font/google` for UI text, Geist Mono for code.
-- Root `CLAUDE.md` rewritten to cover both apps: backend architecture/conventions consolidated from the old `backend/CLAUDE.md`, plus a new Frontend section (stack, Tailwind v4's CSS-based config, token usage rules, shadcn conventions, planned route-group structure, session-handling decision) and a repo-wide "Working practices" section formalizing the devlog/`FUTURE_IMPROVEMENTS.md` update habit already in use.
-
-**Verified (this session — code review + `npm run build`, not a live-session QA log)**
-- `npm run build` compiles cleanly on the current tree (see the 2026-08-01 entry above for the full route table), confirming the base scaffold, token wiring, and `button.tsx` customization all still build correctly together with the screens added on top of them.
-
-**Blocking fixes**
-- None recorded.
-
-**Open questions**
-- None recorded from this session.
-
-**Next up**
-- Auth screens (login/register/forgot-password/reset-password) consuming `POST /auth/*` — shipped same week, see the entry above.
-
-=======
 ## 2026-08-03 — Owner dashboard shell: auth guard, sidebar, mobile nav
 
 **Shipped**

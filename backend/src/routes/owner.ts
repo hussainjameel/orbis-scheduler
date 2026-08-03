@@ -554,19 +554,28 @@ router.get('/bookings', authenticate, requireApprovedBusiness, async (req, res) 
   }
 
   const PAGE_SIZE = 25
-  const where: Prisma.BookingWhereInput = { businessId }
+
+  // Shared with countsWhere below, so a search term narrows both the list and the pill counts identically.
+  const searchFilter: Prisma.BookingWhereInput =
+    typeof search === 'string' && search.trim().length > 0
+      ? {
+          OR: [
+            { customerName: { contains: search, mode: 'insensitive' } },
+            { customerEmail: { contains: search, mode: 'insensitive' } },
+          ],
+        }
+      : {}
+
+  const where: Prisma.BookingWhereInput = { businessId, ...searchFilter }
   if (typeof status === 'string') {
     where.status = status as BookingStatus
   }
-  if (typeof search === 'string' && search.trim().length > 0) {
-    where.OR = [
-      { customerName: { contains: search, mode: 'insensitive' } },
-      { customerEmail: { contains: search, mode: 'insensitive' } },
-    ]
-  }
+
+  // Deliberately omits the status filter — the pills for inactive statuses need their real counts, not 0.
+  const countsWhere: Prisma.BookingWhereInput = { businessId, ...searchFilter }
 
   try {
-    const [bookings, total] = await Promise.all([
+    const [bookings, total, statusGroups] = await Promise.all([
       prisma.booking.findMany({
         where,
         orderBy: { createdAt: 'desc' },
@@ -583,9 +592,26 @@ router.get('/bookings', authenticate, requireApprovedBusiness, async (req, res) 
         },
       }),
       prisma.booking.count({ where }),
+      prisma.booking.groupBy({
+        by: ['status'],
+        where: countsWhere,
+        _count: { status: true },
+      }),
     ])
 
-    res.status(200).json({ bookings, total, page, totalPages: Math.ceil(total / PAGE_SIZE) })
+    const counts = { pending: 0, approved: 0, rejected: 0, cancelled: 0 }
+    for (const group of statusGroups) {
+      counts[group.status] = group._count.status
+    }
+    const all = counts.pending + counts.approved + counts.rejected + counts.cancelled
+
+    res.status(200).json({
+      bookings,
+      total,
+      page,
+      totalPages: Math.ceil(total / PAGE_SIZE),
+      counts: { ...counts, all },
+    })
   } catch (err) {
     console.error('Failed to fetch bookings', err)
     res.status(500).json({ error: 'Something went wrong, please try again' })
