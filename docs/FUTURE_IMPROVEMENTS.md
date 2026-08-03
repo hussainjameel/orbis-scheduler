@@ -26,6 +26,7 @@ Deliberately deferred beyond MVP scope. Not bugs — documented tradeoffs made t
 ## Performance
 
 - Add an index on `Booking(businessId, status)` — currently only the primary key is indexed. Fine at current data volume; worth adding before real production load, since the owner bookings list filters and sorts on both columns.
+- `booking_field_values` duplicates Name/Email/Phone that already exist as dedicated columns on `bookings` — every submission stores these three values twice. Deliberate per UC3 (field-by-field record of the full form, including protected fields), not a bug. Low priority; revisit only if storage or query complexity becomes a real concern.
 
 ## Documentation corrections needed
 

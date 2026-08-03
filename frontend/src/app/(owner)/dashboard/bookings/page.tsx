@@ -5,12 +5,16 @@ import { apiFetch, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
   BOOKING_STATUSES,
+  formatBookingDate,
+  formatBookingTime,
+  formatRelativeTime,
   type BookingStatus,
   type BookingsResponse,
 } from "@/lib/bookings";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
+import { StatusBadge } from "@/components/status-badge";
 import { StatusFilterPills } from "./status-filter-pills";
 import { BookingSearch } from "./booking-search";
 
@@ -18,35 +22,6 @@ const PAGE_SIZE = 25;
 const VALID_STATUSES = BOOKING_STATUSES.map((s) => s.value);
 
 const GRID_COLS = "grid grid-cols-[1.5fr_1fr_110px_120px] items-center gap-3 px-3 py-2";
-
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-function formatBookingDate(iso: string): string {
-  const [year, month, day] = iso.slice(0, 10).split("-").map(Number);
-  return `${day} ${MONTHS[month! - 1]} ${year}`;
-}
-
-function formatBookingTime(time: string): string {
-  const [hours, minutes] = time.split(":").map(Number);
-  const period = hours! >= 12 ? "PM" : "AM";
-  const hour12 = hours! % 12 === 0 ? 12 : hours! % 12;
-  return `${hour12}:${String(minutes).padStart(2, "0")} ${period}`;
-}
-
-function formatRelativeTime(iso: string): string {
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const minutes = Math.floor(diffMs / 60000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days} day${days === 1 ? "" : "s"} ago`;
-  const months = Math.floor(days / 30);
-  if (months < 12) return `${months} month${months === 1 ? "" : "s"} ago`;
-  const years = Math.floor(months / 12);
-  return `${years} year${years === 1 ? "" : "s"} ago`;
-}
 
 export default async function BookingsPage({
   searchParams,
@@ -126,55 +101,45 @@ export default async function BookingsPage({
             <span>Status</span>
             <span>Requested</span>
           </div>
-          {data.bookings.map((booking) => {
-            const statusMeta = BOOKING_STATUSES.find((s) => s.value === booking.status)!;
-            return (
-              <Link
-                key={booking.id}
-                href={`/dashboard/bookings/${booking.id}`}
-                className={cn(
-                  GRID_COLS,
-                  "cursor-pointer border-t border-border-default text-sm text-text-primary hover:bg-surface-1"
-                )}
-              >
-                <span className="min-w-0 truncate">{booking.customerName}</span>
-                <span className="tabular min-w-0 truncate text-text-secondary">
-                  {formatBookingDate(booking.bookingDate)} · {formatBookingTime(booking.bookingTime)}
-                </span>
-                <span>
-                  <span className={cn("w-fit rounded-full px-2.5 py-0.5 text-xs", statusMeta.badgeClassName)}>
-                    {statusMeta.label}
-                  </span>
-                </span>
-                <span className="text-xs text-text-muted">{formatRelativeTime(booking.createdAt)}</span>
-              </Link>
-            );
-          })}
+          {data.bookings.map((booking) => (
+            <Link
+              key={booking.id}
+              href={`/dashboard/bookings/${booking.id}?from=${resolvedStatus}`}
+              className={cn(
+                GRID_COLS,
+                "cursor-pointer border-t border-border-default text-sm text-text-primary hover:bg-surface-1"
+              )}
+            >
+              <span className="min-w-0 truncate">{booking.customerName}</span>
+              <span className="tabular min-w-0 truncate text-text-secondary">
+                {formatBookingDate(booking.bookingDate)} · {formatBookingTime(booking.bookingTime)}
+              </span>
+              <span>
+                <StatusBadge status={booking.status} />
+              </span>
+              <span className="text-xs text-text-muted">{formatRelativeTime(booking.createdAt)}</span>
+            </Link>
+          ))}
         </div>
 
         <div className="sm:hidden">
-          {data.bookings.map((booking) => {
-            const statusMeta = BOOKING_STATUSES.find((s) => s.value === booking.status)!;
-            return (
-              <Link
-                key={booking.id}
-                href={`/dashboard/bookings/${booking.id}`}
-                className="block min-h-11 border-t border-border-default px-3 py-3 first:border-t-0 hover:bg-surface-1"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-medium text-text-primary">{booking.customerName}</span>
-                  <span className={cn("shrink-0 rounded-full px-2.5 py-0.5 text-xs", statusMeta.badgeClassName)}>
-                    {statusMeta.label}
-                  </span>
-                </div>
-                <p className="tabular mt-1 text-sm text-text-secondary">
-                  {formatBookingDate(booking.bookingDate)} · {formatBookingTime(booking.bookingTime)}
-                </p>
-                <p className="mt-1 text-xs text-text-muted">{booking.customerEmail}</p>
-                <p className="mt-0.5 text-xs text-text-muted">{formatRelativeTime(booking.createdAt)}</p>
-              </Link>
-            );
-          })}
+          {data.bookings.map((booking) => (
+            <Link
+              key={booking.id}
+              href={`/dashboard/bookings/${booking.id}?from=${resolvedStatus}`}
+              className="block min-h-11 border-t border-border-default px-3 py-3 first:border-t-0 hover:bg-surface-1"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-medium text-text-primary">{booking.customerName}</span>
+                <StatusBadge status={booking.status} className="shrink-0" />
+              </div>
+              <p className="tabular mt-1 text-sm text-text-secondary">
+                {formatBookingDate(booking.bookingDate)} · {formatBookingTime(booking.bookingTime)}
+              </p>
+              <p className="mt-1 text-xs text-text-muted">{booking.customerEmail}</p>
+              <p className="mt-0.5 text-xs text-text-muted">{formatRelativeTime(booking.createdAt)}</p>
+            </Link>
+          ))}
         </div>
       </>
     );

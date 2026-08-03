@@ -643,7 +643,10 @@ router.get('/bookings/:id', authenticate, requireApprovedBusiness, async (req, r
         updatedAt: true,
         fieldValues: {
           orderBy: { formField: { displayOrder: 'asc' } },
-          select: { value: true, formField: { select: { label: true } } },
+          select: {
+            value: true,
+            formField: { select: { label: true, fieldType: true, options: true } },
+          },
         },
       },
     })
@@ -655,7 +658,12 @@ router.get('/bookings/:id', authenticate, requireApprovedBusiness, async (req, r
     const { fieldValues, ...rest } = booking
     res.status(200).json({
       ...rest,
-      fieldValues: fieldValues.map((fv) => ({ label: fv.formField.label, value: fv.value })),
+      fieldValues: fieldValues.map((fv) => ({
+        label: fv.formField.label,
+        value: fv.value,
+        fieldType: fv.formField.fieldType,
+        options: fv.formField.options,
+      })),
     })
   } catch (err) {
     console.error('Failed to fetch booking', err)
