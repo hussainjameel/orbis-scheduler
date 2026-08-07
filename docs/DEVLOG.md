@@ -1,5 +1,51 @@
 # Orbis Scheduler — Development Log
 
+## 2026-08-04 — Availability screen fixes: field-error borders, validate-on-click, toast position, 3-up grid
+
+**Shipped**
+- `day-card.tsx`: every `Select` field driven by `fieldState.error` (Start/End time, both break selects, slot duration) now gets `aria-invalid={Boolean(...)}` passed through to its `SelectTrigger`. `select.tsx`'s trigger already ships `aria-invalid:border-destructive` (plus `dark:` opacity variants) from the shadcn base — it just wasn't being told a field was invalid, so only the message text was ever visible, not the border the design spec's Input states table calls for. `--destructive` resolves to `--status-rejected-text`, which is redefined under `.dark`, so this is dark-mode-correct without any extra work.
+- `availability-form.tsx`: `form.handleSubmit(onSubmit)` → `form.handleSubmit(onSubmit, onInvalid)`, where `onInvalid` fires `toast.error("Fix the highlighted fields before saving")`. Uses react-hook-form's own built-in invalid path rather than a second manual validity check. The Save button was never actually disabled by validity (only by `submitting`) — the real gap was silence: an invalid click populated inline errors with zero other feedback.
+- `components/toaster.tsx`: desktop toast position moved from bottom-right to top-right (`sm:top-4 sm:right-4 sm:bottom-auto`, mobile unchanged — still bottom, full width, below `sm`). **Deliberate deviation from the written Design Specification**, which documents "bottom-right on desktop." Reason: bottom-right sat directly over/near the page's primary action button — the exact button someone just clicked — so the toast and the next click target competed for the same screen area. There is no editable source for the Design Specification PDF in this repo (no `.docx`/Figma equivalent, only the checked-in PDF), so this entry is the documented record of the drift per the same discipline that caught the UC9/404-vs-403 wording mismatch — flag it here rather than let it go unrecorded. Also flipped the entrance animation to `slide-in-from-top-2` at `sm:` and up (mobile keeps `slide-in-from-bottom-2`), since sliding "from bottom" into a top-anchored toast looked backwards.
+- `availability-form.tsx` + `day-card.tsx`: grid changed from a flat `grid-cols-2` to `grid-cols-1 sm:grid-cols-3` (1-up mobile, 3-up desktop) — `sm` confirmed as this app's one established mobile/desktop cutoff (`layout.tsx`, `owner-sidebar.tsx`, `owner-mobile-nav.tsx`, `register-form.tsx` all use it; no existing 3-column precedent anywhere, so no new breakpoint was invented). Day name (`text-base` → `sm:text-sm`), the four row labels ("From"/"To"/"Break"/"Slot", `text-sm` → `sm:text-xs`), and the Select triggers' own text (`sm:text-xs` added) all step down one notch on the type scale at the same breakpoint, to keep the narrower 3-up cards from wrapping. The "Available"/"Closed" label stayed at `text-xs` — already the smallest defined size, so it has nowhere lower to go.
+
+**Verified**
+- `npx tsc --noEmit`, `npm run lint`, `npm run build` all clean after all four changes.
+
+**Blocking fixes**
+- None.
+
+**Open questions**
+- None recorded from this session.
+
+**Next up**
+- Business Profile and Form Builder remain the unbuilt owner-area screens.
+
+## 2026-08-04 — Availability screen
+
+**Shipped**
+- `frontend/src/app/(owner)/dashboard/availability/page.tsx` (Server Component) + `availability-form.tsx` (Client Component) + `day-card.tsx`: the weekly availability grid, the first screen built on the react-hook-form + zod combination frontend spec decision 15 reserved for it. Two-column grid of 7 day cards (`GET /owner/availability`, which returns `{ availability: [...] }` — confirmed by reading `backend/src/routes/owner.ts` rather than assumed, since the task brief guessed a bare array); each card is an Open/Closed `Switch` plus, when open, From/To/Break/Slot rows built from `useFieldArray` over a single `days` array.
+- `frontend/src/lib/availability.ts`: types, the 15-minute time-option list and `hh:mm AM/PM` formatter (pure integer math on `HH:MM` strings, never `Date`, per decision 14), and the zod schema. The schema mirrors the PUT route's own validation order (`backend/src/routes/owner.ts:139-190`) so client errors round-trip before the server does, and reuses UC7's exact alternate-flow copy: "You must have at least one open day for customers to book." (A1), "End time must be after start time" (A2), and a templated "A {N} min booking won't fit in your {start}-{end} window for {Day}. Either extend the day or shorten the duration." (A3). Break-window messages aren't given exact copy in UC7, so those are written in the same plain tone rather than invented as something new-sounding.
+- `PUT /owner/availability` turned out to expect a **bare array**, asymmetric with GET's wrapped shape — the request body is sent as `values.days` directly, not re-wrapped.
+- `AvailabilityRule` rows are only created on first save (nothing seeds them at registration), so a new business's `GET` can return fewer than 7 rows. `fillWeek()` pads any missing `dayOfWeek` with a closed default (`isAvailable: false`, placeholder 09:00–17:00/30 min held in reserve for when the owner opens that day) rather than inventing an open schedule.
+- Post-save resync avoids manually patching form state (decision 1): `useForm`'s `values` option is passed the Server Component's fresh prop directly, with `resetOptions: { keepDirtyValues: false }`, so calling `router.refresh()` after a successful `PUT` re-fetches on the server and the new prop flows straight through to reset the form — no `form.reset()` call needed.
+- Added `select.tsx` and `switch.tsx` via `npx shadcn@latest add` (Base UI primitives, matching `alert-dialog.tsx`'s existing pattern). No `form.tsx` exists in this project's shadcn registry (`base-nova` style) — checked directly (`npx shadcn add form` returns nothing, and no "form"/"field" entry appears in the full component list) — so the form uses `react-hook-form`'s `useForm`/`Controller`/`useFieldArray` directly rather than a shadcn Form wrapper that was never available. `react-hook-form`, `zod`, and `@hookform/resolvers` added to `package.json` — none were installed before this screen.
+- Corrected two token names against the task brief's literal (and wrong) guesses: `border-border` doesn't exist in `globals.css` — the real class is `border-border-default`; `text-secondary`/`text-muted` are actually `text-text-secondary`/`text-text-muted` (prefixed), confirmed by grepping the existing bookings screens rather than trusting the brief.
+
+**Verified**
+- `npx tsc --noEmit`, `npm run lint`, `npm run build` all clean.
+- No warning banner was built for UC7 A4 (existing bookings falling outside new hours) — confirmed by reading the PUT route's success response, which is only `{ message }`, no count of any kind. Logged as a gap in `docs/FUTURE_IMPROVEMENTS.md` rather than faking the UI against data that doesn't exist.
+- Live-verified against the real dev DB rather than just the build: registered a throwaway business via `POST /auth/register`, approved it directly via `setApprovalStatus.ts`, logged in through the real `/api/auth/login` route to get a genuine httpOnly session cookie, then fetched `/dashboard/availability` with that cookie — confirmed the empty-availability new-business case renders all 7 days closed with no server error. Then `PUT` a realistic payload (Monday/Tuesday open with different break/slot configurations, rest closed) through the actual `/api/[...path]` proxy and re-fetched the page — confirmed the save persisted and the two open days' calendar icons picked up `text-brand` while the other five stayed muted, proving the `isAvailable`-driven styling and the GET→fill→render round trip both work end to end. All test data (business, user, form, availability rows) deleted afterward via a throwaway gitignored script; "AF Architects" untouched.
+- Could not click through the actual Switch/Select interactions or the client-side validation/toast/refresh flow in a real browser — no browser-automation tool was available in this environment (only `WebFetch`, which can't execute JS or hold a session). The verification above covers the full server round trip and initial render in both the empty and populated states; the purely client-side interaction path (toggling, selecting, inline validation errors, submit toast) is unverified beyond code review and the `zod` schema's own logic.
+
+**Blocking fixes**
+- None.
+
+**Open questions**
+- None recorded from this session — the one open question (default state for a day with no saved rule) was resolved with the user before implementation: closed, not a pre-filled starter week.
+
+**Next up**
+- Business Profile and Form Builder are the remaining unbuilt owner-area screens from the spec's build order.
+
 ## 2026-08-03 — Owner booking detail screen + client mutation proxy
 
 **Shipped**

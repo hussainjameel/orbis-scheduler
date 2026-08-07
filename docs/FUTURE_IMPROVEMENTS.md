@@ -5,6 +5,7 @@ Deliberately deferred beyond MVP scope. Not bugs — documented tradeoffs made t
 ## Availability & Scheduling
 
 - Seasonal/date-ranged availability rules — currently one fixed recurring weekly template only, no way to set different hours for a specific date range (e.g. holiday hours).
+- `PUT /owner/availability`'s success response is just `{ message }` — no count of existing bookings that now fall outside the new hours. UC7 alternate flow A4 specifies a save-time warning ("You have N existing bookings outside your new hours. Those bookings remain valid.") once this data exists; the frontend availability screen was built without it since there's nothing to show yet. Needs the route to compute affected bookings (approved/pending rows whose `bookingTime` falls outside the newly-saved day's `startTime`/`endTime`/break, or on now-closed days) and return an `affectedBookingsCount` alongside `message`.
 
 ## Admin & Platform
 
