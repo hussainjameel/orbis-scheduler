@@ -29,6 +29,10 @@ Deliberately deferred beyond MVP scope. Not bugs — documented tradeoffs made t
 - Add an index on `Booking(businessId, status)` — currently only the primary key is indexed. Fine at current data volume; worth adding before real production load, since the owner bookings list filters and sorts on both columns.
 - `booking_field_values` duplicates Name/Email/Phone that already exist as dedicated columns on `bookings` — every submission stores these three values twice. Deliberate per UC3 (field-by-field record of the full form, including protected fields), not a bug. Low priority; revisit only if storage or query complexity becomes a real concern.
 
+## File Uploads & Storage
+
+- Logo upload (Business Profile) and file-type form fields (PDF/PNG/JPEG/Word etc. on the customer booking form) both require object storage (S3/R2 or similar) plus a new multipart upload endpoint — neither exists yet. Not a variation on the existing PATCH pattern: needs a storage provider decision, an upload route, file-type/size validation, and a new `logo_url`-style column on `businesses`. For booking-form file fields specifically, the customer would need to upload and receive a URL back before that URL is saved as their `booking_field_values.value` (which is a plain text column). Deferred past MVP/trimester deadline — real new infrastructure, not a quick add-on.
+
 ## Documentation corrections needed
 
 - UC9 alternate flow A3 states cross-tenant booking access returns "403 Forbidden." The actual implementation consistently returns `404` across the entire codebase (chosen for its stronger anti-enumeration property — a `403` would confirm a resource exists). Doc wording is stale and should be updated to match.

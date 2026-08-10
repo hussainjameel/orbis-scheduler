@@ -7,7 +7,7 @@ export default async function AvailabilityPage() {
 
   return (
     <div className="flex flex-col">
-      <h1 className="text-2xl font-medium text-text-primary">Availability</h1>
+      <h1 className="mb-1 text-2xl font-medium text-text-primary">Availability</h1>
       <p className="mb-6 text-sm text-text-secondary">
         Set the hours customers can book each day. Slots are calculated from this schedule automatically.
       </p>

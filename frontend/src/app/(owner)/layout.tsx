@@ -51,14 +51,14 @@ export default async function OwnerLayout({
   }
 
   return (
-    <div className="flex min-h-screen flex-col sm:flex-row">
+    <div className="flex h-screen flex-col overflow-hidden sm:flex-row">
       <OwnerSidebar
         businessName={business.name}
         ownerEmail={business.owner.email}
         pendingCount={0}
       />
       <OwnerMobileNav />
-      <main className="flex-1 px-4 py-6 pb-24 sm:px-8 sm:py-8 sm:pb-8">{children}</main>
+      <main className="flex h-full min-h-0 flex-1 flex-col overflow-y-auto px-4 py-6 pb-24 sm:px-8 sm:py-8 sm:pb-8">{children}</main>
     </div>
   );
 }

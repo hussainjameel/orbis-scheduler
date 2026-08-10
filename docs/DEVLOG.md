@@ -1,5 +1,183 @@
 # Orbis Scheduler — Development Log
 
+## 2026-08-08 — Fixed whole-page scroll on owner routes (sidebar now stays fixed)
+
+**Shipped**
+- `frontend/src/app/(owner)/layout.tsx`: outer wrapper changed from `min-h-screen` to `h-screen overflow-hidden`, and `<main>` gained `h-full min-h-0 overflow-y-auto` — `min-h-screen` let the whole row (sidebar included) grow past the viewport on any content-heavy page, so the browser scrolled the entire page instead of just the content column. `min-h-0` alongside `flex-1 overflow-y-auto` is the standard fix for flex items' implicit `min-height: auto`, which otherwise silently defeats `overflow-y-auto` by letting the item grow instead of scrolling — `main` needed it since it's also internally `flex-col` from the earlier route-loader fix.
+- `frontend/src/components/owner-sidebar.tsx`: `<aside>` gained explicit `h-full`. No overflow handling added deliberately — per instruction, a sidebar that can't fit on a very short viewport is a flagged-but-not-solved edge case, not something to silently clip.
+- Checked for an existing `h-dvh` convention before picking a height unit — none exists anywhere in this codebase (`min-h-screen` is the only pattern in use, here and in `public-sidebar.tsx`), so used `h-screen` to match rather than introducing a new convention unprompted.
+- Mobile: the bottom tab bar (`owner-mobile-nav.tsx`) was already `position: fixed`, so it was never actually affected by this bug and needed no change — confirmed this by reasoning (fixed positioning anchors to the viewport regardless of ancestor overflow/scroll state, since no ancestor sets `transform`/`filter` to create a new containing block) and then empirically (bounding box identical before/after scrolling). The mobile top header, which *was* an ordinary in-flow element and would have scrolled away under the old bug, is fixed for free by the same `main`-only-scrolls change — no separate edit needed.
+
+**Verified**
+- `npx tsc --noEmit`, `npx eslint` clean.
+- Live browser pass via Playwright against a throwaway business seeded with 40 bookings (to force genuine scroll) and a short viewport: confirmed `window.scrollY`/`document.documentElement.scrollTop`/`document.body.scrollTop` all stay `0` while `main.scrollTop` moves independently; confirmed the sidebar's and the Sign-out button's bounding boxes are pixel-identical before and after scrolling 800px of content, not just "looked right" in a screenshot. Separately reproduced the validation-banner case (Availability, all days closed) at a very short viewport and confirmed `document.body.scrollHeight` never exceeds `window.innerHeight` while `main.scrollHeight > main.clientHeight` — the extra banner height is absorbed by `main`'s own scroll, not the page. Confirmed the mobile bottom nav's bounding box is also unchanged across a content scroll. Screenshotted both the resting and scrolled states on the Bookings list to visually confirm the header row itself scrolls out of view while the sidebar doesn't move at all.
+
+**Blocking fixes**
+- None — this session's whole job was the one bug described above.
+
+**Open questions**
+- None.
+
+**Next up**
+- Same as previous entries.
+
+## 2026-08-08 — Settings width, Share width regression, and a real validation-messaging bug
+
+**Shipped**
+- Settings' form card bumped from `max-w-xl` (576px) to `max-w-2xl` (672px) — checked against Share & Embed first rather than guessing a value: Share was already at `max-w-2xl`, so this converges the two "narrow content" screens onto one shared width instead of introducing a third value. Share itself needed no width change.
+- **Found and fixed a real regression while verifying the width bump**: increasing Settings' `max-w` had no visible effect at first — measured its rendered width directly (`getComputedStyle`/`offsetWidth`) rather than trusting a screenshot glance, and it was rendering at 413px despite `max-width: 672px` being correctly applied. Root cause: the previous session's fix to `(owner)/layout.tsx` (making `<main>` a flex column, for the route-loader centering fix) means every direct child of `<main>` is now a flex item — and `mx-auto`'s auto margins disable flexbox's default cross-axis `stretch` for that item, so a plain block wrapper with no explicit width falls back to content-based sizing instead of actually filling out to its `max-width`. Fixed by adding `w-full` alongside `mx-auto max-w-*` on both Settings' and Share's wrapper divs (`w-full` + `max-w-*` + `mx-auto` is the standard combination for this exact situation: fill available space, then cap it, then center the capped box).
+- **Share & Embed was already exhibiting the same underlying bug**, just not visibly — its wrapper happened to render at the correct 672px anyway, but only because one of its cards contains a `whitespace-nowrap` span (the raw booking URL) wide enough to force the flex item's content-based width up near 672px by accident, not because the layout was actually structurally correct. Settings has no equivalent wide unwrapped content (its booking URL is a real `<input>`, which has a small fixed intrinsic width regardless of its value), so it had nothing to accidentally hide the bug behind. Fixed Share the same way for real correctness rather than leaving it working by coincidence. Confirmed no other owner screen uses this `mx-auto` pattern (grepped all six `page.tsx` files), so this was the full extent of it.
+- **Availability's "all days closed" validation showed a misleading toast**, and the persistent banner meant to cover that exact case had actually never rendered at all, for a second reason underneath the first: `useFieldArray` + a whole-array zod `.refine()` puts its error message at `errors.days.root.message`, not `errors.days.message` — confirmed by instrumenting the component temporarily and logging the real runtime error shape rather than assuming (`{"days":{"root":{"message":"You must have at least one open day for customers to book.","type":"custom"}}}`), then removing the debug logging once confirmed. Fixed the property path, and changed `onInvalid` to only fire the "fix the highlighted fields" toast when `errors.days` actually contains per-index field errors (an array with real entries) — the zero-days-open case has nothing to highlight, so it now relies solely on the corrected persistent banner, which already carried the schema's own exact wording.
+
+**Verified**
+- `npx tsc --noEmit`, `npx eslint` clean.
+- Live browser pass via Playwright: reproduced the original all-closed bug first (toast present, banner absent, confirmed via page text) to have a true before/after; after the fix, confirmed the reverse (banner present with the exact schema message, toast absent) and separately confirmed the ordinary per-field path still toasts correctly (toggled a day open, set an invalid end time, confirmed the toast fires and the banner does not). Confirmed both Settings' and Share's rendered widths directly (`offsetWidth`) before and after the `w-full` fix, not just visually. Dark mode checked on both the widened Settings card and the corrected banner.
+
+**Blocking fixes**
+- The `<main>`-flex-column / `mx-auto` width regression and the `errors.days.root` banner bug were both found during this session's own verification work, not left for later — see above.
+
+**Open questions**
+- None.
+
+**Next up**
+- Same as the previous two entries.
+
+## 2026-08-08 — Two consistency fixes across owner dashboard routes
+
+**Shipped**
+- **Route-transition loader, root-caused rather than papered over.** Audited all 7 existing `loading.tsx` files first — they were byte-for-byte identical (no drift to reconcile), so the top-alignment bug wasn't inconsistent implementations, it was a genuine layout bug shared by all of them: `(owner)/layout.tsx`'s `<main>` had `flex-1` (sizing itself as a flex *item* of the outer sidebar row) but was never `display: flex` itself, so `flex-1 items-center justify-center` inside every `loading.tsx` had no flex context to center within and just collapsed to the spinner's own size at the top of the page. Fixed at the root: `<main>` is now also `flex flex-col`. Verified the fix directly via `getComputedStyle` in a live browser session (`display: flex`, `flexDirection: column`) rather than just asserting the CSS should work.
+- New `frontend/src/components/route-loading.tsx` — the same markup every route already had, now defined once and imported by all 8 `loading.tsx` files (`(owner)/loading.tsx`, `dashboard/loading.tsx`, and one per subroute) instead of copy-pasted.
+- Added the one missing `loading.tsx`: `dashboard/bookings/page.tsx` had none, silently falling back to the group-level file. Full coverage now.
+- **Header spacing audit, done before any changes** (findings shared with the user first, not guessed at): six screens had three different effective subtitle-to-content gaps (16px on Dashboard/Bookings/Share via `gap-4` alone, 24px on Availability/Settings via a clean `mb-6`, and a ~48px compounding bug on Booking form where `mb-6` on the subtitle got trapped inside a flex item *and* the outer `gap-6` added again on top of it — margins on a flex item's children don't collapse out through the item the way normal block margins do, so the two values stacked instead of overlapping). Standardized all six on `mb-1` (h1 → subtitle) + `mb-6` (subtitle → content), restructuring each page so the header block sits outside any `gap-*` wrapper — its own margin is the only thing producing that gap, with a separate inner wrapper preserving each screen's existing inter-section rhythm untouched.
+
+**Verified**
+- `npx tsc --noEmit`, `npx eslint` clean.
+- Live browser pass via Playwright: screenshotted all six header screens in sequence to confirm identical visual rhythm (previously-buggy Booking form now matches the others exactly), confirmed `<main>`'s computed flex styles directly, and confirmed both in light and dark mode. Could not reliably capture the transient spinner mid-navigation in a screenshot — Next.js prefetches sidebar `<Link>`s in the background, so by the time a click fires the RSC payload is already cached and no loading state ever renders long enough to catch; tried both `setTimeout`-delayed route interception and CDP-level network throttling, neither reliably beat prefetch. Relying on the computed-style proof instead, which verifies the actual root-cause mechanism directly rather than an emergent timing-dependent symptom of it.
+
+**Blocking fixes**
+- None — the two bugs this entry describes (the `<main>` flex-context bug, the Booking form margin-compounding bug) were the fixes themselves, not incidents hit while building something else.
+
+**Open questions**
+- None.
+
+**Next up**
+- Same as the previous entry — public booking page, `widget.js`, and logo upload/file-type fields remain the known unbuilt pieces.
+
+## 2026-08-08 — Dashboard Home screen (reversing the earlier "no separate home" decision)
+
+Reversing the earlier decision to skip Dashboard Home — /dashboard no longer redirects to /dashboard/bookings, it now renders a real landing screen (greeting, stat cards, recent bookings, setup status, quick link to Share & Embed). Original decision is preserved in DEVLOG history for context; this supersedes it.
+
+**Shipped**
+- `frontend/src/app/(owner)/dashboard/{page,loading,greeting,stat-cards,recent-bookings-card,setup-status-card,get-more-bookings-card}.tsx` — greeting (time-of-day + owner's first name), three stat cards, a recent-bookings list, a setup-status nudge, and a static "get more bookings" card.
+- One call each to `GET /owner/business`, `GET /owner/bookings` (unfiltered, page 1 — its `counts` covers all three stat cards and its `bookings` covers the recent list, so this single call does both jobs rather than fetching twice), `GET /owner/availability`, and `GET /owner/form`, reusing the existing `BookingCounts`/`BookingListItem`/`AvailabilityDay`/`FormField` types from each screen's own lib module rather than re-typing anything.
+- "Approved" stat is the plain all-time `counts.approved` total, not a "this week" figure — checked whether deriving "this week" from the already-fetched page-1-of-25 bookings would be accurate, and it wouldn't (older approved-this-week rows can already be pushed off page 1 by newer bookings of any other status sorted ahead of them, so it would silently undercount rather than being visibly wrong). Not worth faking precision the backend doesn't back up.
+- Setup status reads real data: "Availability set" from `availability.some(day => day.isAvailable)`, "Booking form customized" from `fields.length > 3`. Corrected one detail in the original brief while implementing this: only Name and Email are actually `isProtected` in the registration seed (`backend/src/routes/auth.ts`) — Phone is a required default but not protected — so "three protected defaults" isn't quite accurate, though the `length > 3` heuristic still works for the common case regardless.
+- Greeting reflects the visitor's own local clock, not the server's — a small client component (`greeting.tsx`) seeds a fixed "morning" default (identical on server render and first client paint, avoiding a hydration mismatch) and corrects itself from `new Date().getHours()` in a `useEffect` after mount. Same pattern already used by `use-theme.ts` and the sidebar's collapse state, not a new one.
+- **Found and fixed a real sidebar bug while adding the nav item**: `owner-sidebar.tsx`'s `isActive()` did a `startsWith` prefix match, which is correct for every existing item but breaks the moment `/dashboard` itself becomes a nav target — `/dashboard` is a literal prefix of every other route, so it would've shown as permanently active on every owner page. Fixed by adding an `exact` flag, set only on the new Dashboard entry; verified explicitly in browser testing that Dashboard is active on `/dashboard` and *not* active on `/dashboard/bookings` (and vice versa), since this is exactly the kind of thing that silently regresses.
+- Added "Dashboard" to `owner-mobile-nav.tsx`'s hamburger dropdown (above Settings) — not asked for directly (the brief scoped this to "sidebar"), but with the redirect gone, mobile users would otherwise have had zero path to this screen at all. Bottom tab bar left untouched (already at its practical limit).
+- Fixed two Base UI `nativeButton` console warnings in my own new code (`recent-bookings-card.tsx`'s empty-state action, `get-more-bookings-card.tsx`) by passing `nativeButton={false}` on both `Button render={<Link/>}` usages — same underlying issue already present in `bookings/page.tsx` before this session (not touched, out of scope), but not worth propagating further in newly-authored files when the fix is one prop.
+
+**Verified**
+- `npx tsc --noEmit`, `npx eslint` clean.
+- Live browser pass via Playwright against a throwaway business: confirmed the empty/incomplete states first (zero stat counts, `EmptyState` in the recent-bookings card, both setup rows muted-and-clickable) on a fresh registration with nothing set up, then set availability, added a form field, and seeded five bookings across pending/approved/rejected directly via Prisma (no public booking-submission flow needed for this) — confirmed all three sections flip to their real-data states, confirmed a recent-bookings row click navigates to the correct `/dashboard/bookings/[id]`, confirmed stat counts matched exactly (2 pending / 2 approved / 5 total). Sidebar active-state bug fix confirmed on two different routes. Mobile hamburger dropdown confirmed to show the new Dashboard entry. Light and dark mode both checked. No console errors after the `nativeButton` fix.
+
+**Blocking fixes**
+- The two bugs listed above (sidebar active-state, `nativeButton` warnings) were caught and fixed during this session, not left for later.
+
+**Open questions**
+- None — both things flagged for confirmation before building (the "Approved" stat's source, how setup-status is actually determined) were resolved during planning per the reasoning above.
+
+**Next up**
+- All spec-listed owner screens are now built. Remaining known gaps: the public booking page (`/book/[businessId]`) and `widget.js` (pointed at by Share & Embed and Settings, not yet built), and logo upload / file-type form fields (logged in `docs/FUTURE_IMPROVEMENTS.md`'s "File Uploads & Storage" section).
+
+## 2026-08-07 — Settings (Business Profile) screen
+
+**Shipped**
+- `frontend/src/app/(owner)/dashboard/settings/{page,loading,settings-form}.tsx` — the last unbuilt screen from the spec's original owner build order. Built at `/dashboard/settings`, not the frontend spec's literal `/dashboard/profile` — the sidebar and mobile nav (`owner-sidebar.tsx:35`, `owner-mobile-nav.tsx:52`) already pointed at `/dashboard/settings`, so that's the real route, confirmed before writing any code rather than trusting the spec's route name.
+- Business name and Booking URL render as genuinely `disabled` `Input`s (checked via `.isDisabled()` in browser testing, not just a visual class), each with a `Lock` icon next to the label and helper text below. Booking URL reuses `{origin}/book/{business.id}` — same UUID-based formula as Share & Embed's Section A, confirmed identical for the same business via a live comparison during testing, not just matching code by inspection.
+- **`getOrigin()` extracted to `frontend/src/lib/origin.ts`**, since this is its second use — it previously lived as a private function inside `share/page.tsx`. `share/page.tsx` now imports it instead of defining its own copy; behavior unchanged, confirmed by re-testing that screen after the move.
+- PATCH payload is a named object literal (`{ description, phone, contactEmail, websiteUrl }`), never a spread of broader form state — the backend 400s if `name` or `slug` are merely *present* in the body, not just changed (`owner.ts:62`), so the payload has to structurally exclude them, not just leave them unedited. Verified by intercepting the actual outgoing `PATCH` request in the browser test and confirming those two keys are absent, not just unchanged.
+- Success toast uses the backend's own `{ message: 'Business profile updated successfully.' }` verbatim (`owner.ts:75`) — read the route rather than assumed, same pattern as every other mutation this session.
+- Plain `useState` per field, no react-hook-form/zod — decision 15 reserves the form library for the two "genuinely complex" forms (availability grid, form builder); this is a flat single-card form, same shape as `register-form.tsx` and the Form Builder's `title-description-form.tsx`, both of which use plain state. Native `type="email"`/`type="url"` for the free structural checks decision 4 allows — confirmed no custom URL-format regex exists anywhere in this codebase today (client or server) before deciding not to invent one here either.
+- Phone/Contact email trimmed and normalized to `null` when blank (all four editable columns are nullable in `schema.prisma`) rather than persisting whitespace or empty strings.
+
+**Login-email question, answered before building (per the brief's explicit ask)**
+- Not adding a dedicated login-email display to this screen. `owner-sidebar.tsx` already renders `business.owner.email` persistently in the identity block at the bottom of the sidebar on every owner screen, including this one — visible in every screenshot taken during this session's testing without any extra work. A second copy on this specific page would be redundant with something already permanently on-screen.
+- Kept the "Shown to customers — separate from your login email" helper text under Contact email regardless, since the distinction is real: `contactEmail` (business column, customer-facing, editable here) and `owner.email` (the `User` row's login credential, not editable here) are genuinely different fields in the schema, confirmed by reading `GET /owner/business`'s response shape.
+
+**Verified**
+- `npx tsc --noEmit`, `npx eslint` clean on new and edited files.
+- Live browser pass via Playwright against a throwaway business (registered with initial phone/description/website so the pre-fill path had real data to show, not just empty fields; `contactEmail` deliberately left unset at registration — that field isn't even collected by `/auth/register` — so the test also covered filling it in for the first time; deleted afterward, `AF Architects` untouched): confirmed disabled-field DOM state, confirmed the Booking URL matches Share & Embed's exactly for the same business, confirmed pre-filled values match what was registered, edited and saved all four fields, confirmed the toast's exact wording, confirmed via a direct `GET /owner/business` call afterward that `name`/`slug` were unchanged while the four edited fields persisted, confirmed the captured `PATCH` request body's exact key set. Light and dark mode both checked. No console errors.
+
+**Blocking fixes**
+- None.
+
+**Open questions**
+- None — both questions the brief raised (login email placement, booking-URL slug-vs-UUID wording) were resolved during planning and confirmed correct during testing; see above.
+
+**Next up**
+- Dashboard Home (`/dashboard`) is still just a `redirect("/dashboard/bookings")` stub, not a real overview screen — the one piece of the owner area's original spec-listed screens without a real implementation now that Settings is done. The public booking page (`/book/[businessId]`) and `widget.js` remain the other unbuilt pieces the Share & Embed and Settings screens both point at.
+
+## FUTURE_IMPROVEMENTS.md — new "File Uploads & Storage" section
+
+Logged that logo upload (Business Profile) and file-type booking-form fields both require object storage plus a new multipart upload endpoint — neither exists, and neither is a variation on the existing PATCH pattern. Full wording in `docs/FUTURE_IMPROVEMENTS.md`. Deferred, not forgotten — flagged now while building the screen that would eventually host a logo upload, rather than left to be rediscovered later.
+
+## 2026-08-07 — Share & Embed screen
+
+**Doc correction needed on UC10** (same category as the earlier 404/403 fix): UC10's own text describes Section B as an "iframe HTML snippet" and its technical notes talk about iframe height/auto-resize. That's superseded by the frontend spec's decision 6, which is explicit that the real mechanism is a `<script>` tag opening a modal overlay, specifically because a plain iframe gets squeezed by whatever layout surrounds it on the host page. Built to decision 6, not UC10's literal wording on this one point — UC10 should be updated to match.
+
+**Shipped**
+- `frontend/src/app/(owner)/dashboard/share/{page,loading,copy-button,embed-snippet,qr-section,qr-error-boundary,test-booking-page-button}.tsx` — booking link, embed snippet, and QR code, at the route the sidebar (`owner-sidebar.tsx`, `owner-mobile-nav.tsx`) already pointed at.
+- Business UUID comes from `GET /owner/business` (already selects `id`; the owner layout calls the same endpoint once already, but can't hand typed data into a specific nested page beyond opaque `children`, so this page does its own additive fetch — same pattern every other owner screen already uses). Public booking URL confirmed as `{origin}/book/{business.id}` by reading `GET /public/businesses/:businessId` directly (`where: { id: businessId }`, the raw UUID, not the slug).
+- No public-origin env var existed (checked `.env.local` and grepped `src/` for `NEXT_PUBLIC_`/`APP_URL` — nothing). Rather than inventing one, `page.tsx` derives the origin from the incoming request via `headers()` (`x-forwarded-proto` if a reverse proxy set it, falling back to `NODE_ENV`-based scheme, plus `host`) — zero config, can't drift from wherever this actually deploys.
+- Embed snippet is fixed dark regardless of the app's own theme toggle (confirmed with the user before building — code blocks read as an editor surface, not a themed page element) using literal hex values borrowed from the existing dark palette, not tokens — the one deliberate exception to "never write a raw colour value," documented the same way the 2026-08-04 toast-position deviation was.
+- `qrcode.react`'s `QRCodeCanvas` added (matches UC10's own technical note). QR download reads the canvas via a ref and `.toDataURL("image/png")` — no extra library needed. E1 (QR generation failure) wrapped in a real class-component error boundary (`qr-error-boundary.tsx`) scoped to just the canvas — a plain try/catch around JSX doesn't catch a child's render-time throw, only an error boundary does — so Sections A and B stay completely unaffected if the QR fails; the Download button also hides itself via an `onError` callback lifted out of the boundary, rather than sitting there doing nothing.
+- "Test booking page" diverges from UC10's literal telling on purpose (per explicit instruction): UC10 has the *public page itself* show the A1 "hasn't set availability" message once a customer lands on it, but `/book/[businessId]` doesn't exist in the frontend yet, so the check happens here instead — `GET /owner/availability` fired at click time (not speculatively on page load, since this page doesn't otherwise need it), and a persistent dismissible banner with a link to `/dashboard/availability` shown if no day has `isAvailable: true`. A failed check falls back to opening the tab anyway rather than blocking the primary action over a helper check.
+- Onboarding checklist (UC10 step 6) confirmed out of scope — grepped `frontend/src`, `backend/src`, and `schema.prisma` for "onboarding": zero matches anywhere in the codebase. Not building a stub with nothing to attach to.
+- Flagging a mockup/spec conflict rather than silently picking one: the task brief specified `p-5` (20px) card padding, but the design spec's Cards & panels section fixes all card padding at 16px project-wide, and 20px isn't in the spacing scale at all. Built with `p-4` (16px), matching every other card already shipped (availability's day cards, the form builder's cards).
+
+**Verified**
+- `npx tsc --noEmit`, `npx eslint` clean on all new files.
+- Live browser pass via Playwright against a throwaway business (registered, admin-approved, logged in through the real `/login` UI; deleted afterward — see Blocking fixes for a wrinkle in that cleanup; `AF Architects` untouched): origin derivation confirmed correct (`http://localhost:3000/book/{uuid}` in dev); Section A copy confirmed via `navigator.clipboard.readText()`, not just the toast; Section B snippet copy confirmed the same way, independent of toggling the page's own theme; QR canvas confirmed to actually contain drawn pixel data (not just "an element exists") and the downloaded file confirmed as a real 160×160 PNG via `file`; "Test booking page" confirmed to show the A1 banner with zero availability set (no popup opened) and to open a real new tab to the exact Section A URL once availability was set via a direct `PUT /owner/availability` call. Both light and dark mode checked on everything except the intentionally-fixed embed block.
+- Noticed but did not fix (pre-existing, unrelated to this screen): a Base UI console warning from `bookings/page.tsx`'s `Button render={<Link .../>}` pattern (`nativeButton` prop expects a real `<button>`), surfaced during this session's browser testing because the sidebar prefetches that route. Not touched — out of scope for this screen.
+
+**Blocking fixes**
+- First screenshot of the QR section came back blank — turned out to be a test-timing artifact (the screenshot was taken before the client component finished hydrating and drawing the canvas), not a real bug; confirmed by reading the canvas's actual pixel data via `getImageData`, which showed the QR was drawn correctly all along. No code change needed, just a slower test.
+- `backend/scripts/deleteTestUsers.ts` doesn't delete `availability_rules`, so cleanup 500'd with a FK-constraint error once this session's test business had availability set (a scenario the Availability-screen session's cleanup never hit, since it deleted before saving real rows on a business other sessions also touched). Deleted the orphaned `availability_rules` rows for the one test business via a one-off temp script (written, run, and removed) rather than editing the shared gitignored tool; flagging the gap here rather than patching a script outside this task's scope.
+
+**Open questions**
+- Toast copy for both copy actions ("Link copied" / "Snippet copied") is proposed wording — UC10 doesn't specify exact copy for either.
+- `data-business-id` on the `<script>` tag is a placeholder attribute name; `widget.js` itself doesn't exist yet (decision 6: vanilla JS served from `/public`, separate work) and may expect a different attribute name once it's actually built — this snippet will need updating to match at that point.
+- "Test booking page" links to a route that will 404 until `/book/[businessId]` is built, per the spec's own build order. Expected, not a gap in this screen.
+
+**Next up**
+- Business Profile is still the one unbuilt screen from the spec's original owner-area build order; Dashboard Home (`/dashboard`) is also still just a `redirect("/dashboard/bookings")` stub rather than a real overview screen, unchanged this session — worth flagging since it's easy to assume "shipped" from the sidebar alone. The public booking page (`/book/[businessId]`) and `widget.js` are the two pieces of unbuilt work this session's screen points at but doesn't itself build.
+
+## 2026-08-07 — Form Builder screen
+
+**Shipped**
+- `frontend/src/lib/form-builder.ts` + `dashboard/form/{page,loading,title-description-form,form-builder-client,field-row,field-edit-form,options-editor,add-field-panel,preview-panel}.tsx`: the dynamic booking-form editor (UC8, spec screen 10). Title/description editor at top (plain state, its own `PUT /owner/form`), field list left / add-field panel right. Field add/edit/delete/reorder each fire their own request immediately — confirmed against the actual endpoints in `backend/src/routes/owner.ts` (separate `POST`/`PATCH`/`DELETE`/`PUT .../reorder`, no batching transaction) rather than trusting UC8's narrative "Save Form" step, which predates the endpoint-level split.
+- Editing pattern is Option C: clicking a non-protected row expands it in place (`bg-surface-1`, indented under the drag-handle width) into a scoped `useForm(zodResolver(...))` instance — one per expanded row, reused identically for both add and edit. Protected fields (Name, Email — confirmed via the registration seed in `backend/src/routes/auth.ts`, `isProtected: true` on exactly those two; Phone is required but **not** protected) render a lock icon, no handle, not clickable, no edit/delete affordance at all.
+- `fieldType` turned out to be immutable after creation — `PATCH /form/fields/:id` 400s if it's present in the body — so the expanded row's Type select is only interactive while adding a new field; editing an existing one shows it disabled. Not in the original task brief; found by reading the route.
+- No server-side duplicate-label or empty-options check exists anywhere in `owner.ts`, confirming both must be fully client-side: duplicate-label compares trimmed/lowercased against every sibling field (including protected ones); A2's copy ("Add at least one option for this dropdown") is adapted per actual type rather than hardcoded, since showing "dropdown" on a checkbox field would read as a bug.
+- Reorder uses `dnd-kit` (`@dnd-kit/core` + `/sortable` + `/utilities`, newly added — nothing drag-related existed in the dependency tree). Every row participates in `useSortable` (so protected rows still animate out of the way when displaced) but only non-protected rows get the drag `listeners`, attached to a `GripVertical` handle rather than the row itself. Drag is disabled screen-wide while any row is expanded. `onDragEnd` reorders local state optimistically and rolls back on a failed `PUT .../reorder`.
+- "Preview form" renders the in-memory field list as a static, read-only projection in the right column (toggled in place of the add-field panel) — the real public booking page (`/book/[businessId]`) doesn't exist in the frontend yet, so this was a deliberate scope call made with the user before building rather than guessed.
+
+**Verified**
+- `npx tsc --noEmit` clean on all new files (pre-existing `.next/types/validator.ts` route-typing noise is unrelated). `npx eslint` clean after one fix (see Blocking fixes).
+- Full live browser pass via Playwright (`chromium-cli` wasn't available in this environment; a local `playwright` install substituted, chromium launched headless) against a throwaway business registered through the real `/auth/register` → admin-approved → logged in through the real `/login` UI, not a mocked session. Confirmed end-to-end, not just rendered: adding a dropdown field with two options persists (`POST` → toast → still present after a fresh page load, cross-checked directly against `GET /owner/form`); the duplicate-label block and the adapted A2 copy both fire inline, not as toasts; clicking a protected row is a genuine no-op; editing an existing field shows its Type select disabled; both a keyboard-driven reorder (Space/Arrow/Space) and a real synthetic mouse drag change the order on screen **and** persist through `PUT /owner/form/fields/reorder`, verified against the API afterward rather than trusting the DOM. Both light and dark mode screenshotted at each step — token usage held up, no raw-color leaks, `surface-1`/`surface-2` distinction correct on the expanded row in both modes. No console errors in any run. Test business (user id 57, "Form Builder QA Co") deleted afterward via the existing gitignored `backend/scripts/deleteTestUsers.ts`; "AF Architects" untouched.
+
+**Blocking fixes**
+- `DndContext` needs an explicit `id` prop — without one, dnd-kit's internal id counter produced different values on the server render vs. the client hydration pass, throwing a real React hydration-mismatch warning caught during the first browser test. Fixed with `id="form-builder-dnd"`.
+- The drag handle's own `onKeyDown` didn't stop propagation, so pressing Space to pick up a row for a keyboard-driven drag also bubbled up to the row's `onKeyDown` (Enter/Space → expand), firing both at once. First reorder test moved nothing but silently expanded the row instead; fixed by stopping propagation and manually delegating to dnd-kit's own `onKeyDown` handler.
+
+**Open questions**
+- Toast copy for field add/edit/delete ("Field added to your booking form" / "Field updated" / "Field deleted") and the duplicate-label inline message ("A field with this label already exists") are my own proposed wording — neither UC8 nor the frontend spec gives exact copy for these, only for the title/description save ("Your booking form has been updated", used verbatim).
+- Preview form's in-page-panel behavior was a scope call made with the user for this session; worth revisiting once the public booking page exists, since a true live preview would be more faithful.
+
+**Next up**
+- Business Profile is now the only unbuilt screen left in the spec's owner-area build order (Availability, Bookings, and Form Builder are all shipped).
+
 ## 2026-08-04 — Availability screen fixes: field-error borders, validate-on-click, toast position, 3-up grid
 
 **Shipped**

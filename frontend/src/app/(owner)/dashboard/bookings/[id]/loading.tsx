@@ -1,9 +1,5 @@
-import { LogoSpinner } from "@/components/logo";
+import { RouteLoading } from "@/components/route-loading";
 
 export default function Loading() {
-  return (
-    <div className="flex flex-1 items-center justify-center">
-      <LogoSpinner className="size-8" />
-    </div>
-  );
+  return <RouteLoading />;
 }

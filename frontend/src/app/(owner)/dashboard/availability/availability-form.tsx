@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm, useFieldArray } from "react-hook-form";
+import { useForm, useFieldArray, type FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import { Button } from "@/components/ui/button";
@@ -27,7 +27,10 @@ export function AvailabilityForm({ initialDays }: { initialDays: AvailabilityDay
   });
 
   const { fields } = useFieldArray({ control: form.control, name: "days" });
-  const weekError = form.formState.errors.days?.message;
+  // useFieldArray + a whole-array zod .refine() puts the message at
+  // `.root`, not directly on `.days` — confirmed against the actual
+  // runtime error shape, not assumed.
+  const weekError = form.formState.errors.days?.root?.message;
 
   async function onSubmit(values: AvailabilityFormValues) {
     setSubmitError(null);
@@ -48,8 +51,17 @@ export function AvailabilityForm({ initialDays }: { initialDays: AvailabilityDay
     }
   }
 
-  function onInvalid() {
-    toast.error("Fix the highlighted fields before saving");
+  function onInvalid(errors: FieldErrors<AvailabilityFormValues>) {
+    // Per-field errors (end-before-start, break outside window, etc.) are
+    // array entries on `errors.days` and DO get a rejected border on the
+    // specific field — the toast is accurate there. The zero-days-open
+    // rule is form-level: nothing turns red, so the same toast would be
+    // misleading. That case is covered by the `weekError` banner above
+    // instead, using the schema's own message rather than new copy.
+    const hasFieldErrors = Array.isArray(errors.days) && errors.days.some((day) => day && Object.keys(day).length > 0);
+    if (hasFieldErrors) {
+      toast.error("Fix the highlighted fields before saving");
+    }
   }
 
   return (

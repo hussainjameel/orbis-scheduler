@@ -146,11 +146,11 @@ export default async function BookingsPage({
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div className="flex flex-col">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-medium text-text-primary">Bookings</h1>
-          <p className="mt-1 text-sm">
+          <h1 className="mb-1 text-2xl font-medium text-text-primary">Bookings</h1>
+          <p className="text-sm">
             <span className="font-medium text-pending-text">{counts.pending} pending</span>
             <span className="text-text-secondary"> · {counts.approved} approved · {counts.all} total</span>
           </p>
@@ -158,33 +158,35 @@ export default async function BookingsPage({
         <BookingSearch />
       </div>
 
-      <StatusFilterPills counts={counts} />
+      <div className="flex flex-col gap-4">
+        <StatusFilterPills counts={counts} />
 
-      <div className="rounded-md border border-border-default bg-surface-2">{content}</div>
+        <div className="rounded-md border border-border-default bg-surface-2">{content}</div>
 
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-text-muted">
-          Showing {showingFrom}–{showingTo} of {data.total}
-        </p>
-        <div className="flex gap-2">
-          {isFirstPage ? (
-            <span className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "pointer-events-none opacity-50")}>
-              Previous
-            </span>
-          ) : (
-            <Link href={pageHref(data.page - 1)} className={buttonVariants({ variant: "ghost", size: "sm" })}>
-              Previous
-            </Link>
-          )}
-          {isLastPage ? (
-            <span className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "pointer-events-none opacity-50")}>
-              Next
-            </span>
-          ) : (
-            <Link href={pageHref(data.page + 1)} className={buttonVariants({ variant: "ghost", size: "sm" })}>
-              Next
-            </Link>
-          )}
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-text-muted">
+            Showing {showingFrom}–{showingTo} of {data.total}
+          </p>
+          <div className="flex gap-2">
+            {isFirstPage ? (
+              <span className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "pointer-events-none opacity-50")}>
+                Previous
+              </span>
+            ) : (
+              <Link href={pageHref(data.page - 1)} className={buttonVariants({ variant: "ghost", size: "sm" })}>
+                Previous
+              </Link>
+            )}
+            {isLastPage ? (
+              <span className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "pointer-events-none opacity-50")}>
+                Next
+              </span>
+            ) : (
+              <Link href={pageHref(data.page + 1)} className={buttonVariants({ variant: "ghost", size: "sm" })}>
+                Next
+              </Link>
+            )}
+          </div>
         </div>
       </div>
     </div>

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Home,
   List,
   Clock,
   LayoutList,
@@ -27,7 +28,8 @@ import { cn } from "@/lib/utils";
 
 const STORAGE_KEY = "orbis-sidebar-collapsed";
 
-const NAV_ITEMS: { label: string; href: string; icon: LucideIcon }[] = [
+const NAV_ITEMS: { label: string; href: string; icon: LucideIcon; exact?: boolean }[] = [
+  { label: "Dashboard", href: "/dashboard", icon: Home, exact: true },
   { label: "Bookings", href: "/dashboard/bookings", icon: List },
   { label: "Availability", href: "/dashboard/availability", icon: Clock },
   { label: "Booking form", href: "/dashboard/form", icon: LayoutList },
@@ -35,7 +37,11 @@ const NAV_ITEMS: { label: string; href: string; icon: LucideIcon }[] = [
   { label: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
 
-function isActive(pathname: string, href: string) {
+// `/dashboard` is a literal prefix of every other item's route, so a plain
+// startsWith prefix match would keep Dashboard permanently "active" on
+// every owner page — exact-match it instead of the item requests that.
+function isActive(pathname: string, href: string, exact?: boolean) {
+  if (exact) return pathname === href;
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -74,7 +80,7 @@ export function OwnerSidebar({
     <TooltipProvider>
       <aside
         className={cn(
-          "hidden shrink-0 flex-col border-r border-border-default bg-surface-1 py-4 transition-[width] duration-base sm:flex",
+          "hidden h-full shrink-0 flex-col border-r border-border-default bg-surface-1 py-4 transition-[width] duration-base sm:flex",
           collapsed ? "w-[56px] items-center px-2" : "w-[180px] px-3"
         )}
       >
@@ -86,7 +92,7 @@ export function OwnerSidebar({
         {/* Nav */}
         <nav className="mt-6 flex flex-1 flex-col gap-1">
           {NAV_ITEMS.map((item) => {
-            const active = isActive(pathname, item.href);
+            const active = isActive(pathname, item.href, item.exact);
             const Icon = item.icon;
             const showBadge = item.label === "Bookings" && pendingCount > 0;
 

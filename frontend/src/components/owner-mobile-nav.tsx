@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { List, Clock, LayoutList, Share2, Settings, Menu, type LucideIcon } from "lucide-react";
+import { Home, List, Clock, LayoutList, Share2, Settings, Menu, type LucideIcon } from "lucide-react";
 
 import { Logo } from "@/components/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -47,6 +47,14 @@ export function OwnerMobileNav() {
             }
           />
           <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              render={
+                <Link href="/dashboard" className="flex items-center gap-2">
+                  <Home className="size-4 text-text-muted" strokeWidth={1.5} />
+                  <span>Dashboard</span>
+                </Link>
+              }
+            />
             <DropdownMenuItem
               render={
                 <Link href="/dashboard/settings" className="flex items-center gap-2">
