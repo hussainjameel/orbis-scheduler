@@ -2,7 +2,7 @@ import 'dotenv/config'
 import prisma from '../src/lib/prisma.js'
 
 // Edit this array with the exact user IDs you want to delete.
-const userIdsToDelete = [1, 2, 3] // Replace with actual user IDs
+const userIdsToDelete = [36, 39, 41] // Replace with actual user IDs
 
 async function main() {
   const businesses = await prisma.business.findMany({

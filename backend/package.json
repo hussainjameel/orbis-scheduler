@@ -7,8 +7,10 @@
     "dev": "nodemon --exec tsx src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "listOwners": "tsx scripts/listOwners.ts",
-    "deleteTestUsers": "tsx scripts/deleteTestUsers.ts"
+    "listOwners": "npx tsx scripts/listOwners.ts",
+    "deleteTestUsers": "npx tsx scripts/deleteTestUsers.ts",
+    "listBookingsByBusiness": "npx tsx scripts/listBookingsByBusiness.ts",
+    "deleteJunkBookings": "npx tsx scripts/deleteJunkBookings.ts"
   },
   "keywords": [],
   "author": "",
