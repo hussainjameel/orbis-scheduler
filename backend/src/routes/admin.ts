@@ -8,6 +8,27 @@ import { sendMail } from '../lib/mailer.js'
 
 const router = Router()
 
+// Returns the current admin's own profile.
+router.get('/me', authenticate, requireAdmin, async (req, res) => {
+  const userId = req.user!.userId
+
+  try {
+    const admin = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true, email: true },
+    })
+
+    if (!admin) {
+      return res.status(404).json({ error: 'Admin not found.' })
+    }
+
+    res.status(200).json({ admin })
+  } catch (err) {
+    console.error('Failed to fetch admin profile', err)
+    res.status(500).json({ error: 'Something went wrong, please try again' })
+  }
+})
+
 // Approves a pending business registration.
 router.patch('/businesses/:id/approve', authenticate, requireAdmin, async (req, res) => {
   const id = req.params.id as string
