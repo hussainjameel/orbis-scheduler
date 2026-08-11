@@ -16,7 +16,11 @@ export default async function FormBuilderPage() {
       </div>
 
       <div className="flex flex-col gap-6">
-        <TitleDescriptionForm initialTitle={form.title} initialDescription={form.description} />
+        <TitleDescriptionForm
+          initialTitle={form.title}
+          initialDescription={form.description}
+          initialBookingWindowDays={form.bookingWindowDays}
+        />
 
         <FormBuilderClient initialFields={form.fields} />
       </div>

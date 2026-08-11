@@ -8,6 +8,9 @@ import type { Slot } from '../lib/slots.js'
 const router = Router()
 
 const DATE_FORMAT = /^\d{4}-\d{2}-\d{2}$/
+// Mirrors auth.ts's EMAIL_RULE exactly — same shape check, same error copy, so the app
+// has one consistent standard for "does this look like an email" rather than two.
+const EMAIL_RULE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 function parseCalendarDate(dateStr: string): { year: number; month: number; day: number } | null {
   if (!DATE_FORMAT.test(dateStr)) return null
@@ -28,7 +31,32 @@ router.get('/businesses/:businessId', async (req, res) => {
   try {
     const business = await prisma.business.findUnique({
       where: { id: businessId },
-      select: { id: true, name: true, description: true, phone: true, approvalStatus: true, isActive: true },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        phone: true,
+        approvalStatus: true,
+        isActive: true,
+        availabilityRules: { select: { dayOfWeek: true, isAvailable: true } },
+        bookingForms: {
+          where: { isActive: true },
+          take: 1,
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            bookingWindowDays: true,
+            formFields: {
+              orderBy: { displayOrder: 'asc' },
+              // isProtected is included so the client can reliably identify the
+              // always-present, never-renameable Name/Email fields (registration seeds
+              // exactly these two as protected) without guessing off their label alone.
+              select: { id: true, label: true, fieldType: true, isRequired: true, displayOrder: true, options: true, isProtected: true },
+            },
+          },
+        },
+      },
     })
 
     // Not found, not approved, and suspended all return the same 404, so a customer can't tell them apart.
@@ -36,12 +64,30 @@ router.get('/businesses/:businessId', async (req, res) => {
       return res.status(404).json({ error: 'Business not found.' })
     }
 
+    const form = business.bookingForms[0]
+
     res.status(200).json({
       business: {
         id: business.id,
         name: business.name,
         description: business.description,
         phone: business.phone,
+        // Weekly open/closed pattern only — day-of-week granularity is enough to dim
+        // closed days on the calendar. Actual bookable times for a specific date still
+        // come exclusively from GET /public/slots, never derived from this.
+        availability: business.availabilityRules.map((rule) => ({
+          dayOfWeek: rule.dayOfWeek,
+          isAvailable: rule.isAvailable,
+        })),
+        form: form
+          ? {
+              id: form.id,
+              title: form.title,
+              description: form.description,
+              bookingWindowDays: form.bookingWindowDays,
+              fields: form.formFields,
+            }
+          : null,
       },
     })
   } catch (err) {
@@ -123,6 +169,10 @@ router.post('/bookings', async (req, res) => {
     !customerEmail || typeof customerEmail !== 'string'
   ) {
     return res.status(400).json({ error: 'businessId, formId, bookingDate, bookingTime, customerName and customerEmail are required' })
+  }
+
+  if (!EMAIL_RULE.test(customerEmail)) {
+    return res.status(400).json({ error: 'Invalid email format' })
   }
 
   const parsedDate = parseCalendarDate(bookingDate)

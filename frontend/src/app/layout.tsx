@@ -29,6 +29,14 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${dmSans.variable} ${geistMono.variable} h-full antialiased`}
+      // The booking page's ThemeScript (app/(public)/book/[businessId]/theme-script.tsx)
+      // mutates this element's class before hydration runs, to apply dark mode without a
+      // flash — that's a deliberate, out-of-band DOM write React can't know about ahead of
+      // time, and would otherwise log a hydration-mismatch warning every load. Standard,
+      // narrowly-scoped fix for exactly this pattern (same one Next's own dark-mode guide
+      // and next-themes use) — only silences mismatches on this element's own attributes,
+      // not anywhere else in the tree.
+      suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">
         <AppToastProvider>

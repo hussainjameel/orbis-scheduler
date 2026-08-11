@@ -6,20 +6,32 @@ import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LoadingOverlay } from "@/components/loading-overlay";
 import { clientFetch, ApiError } from "@/lib/api-client";
 import { toast } from "@/lib/toast";
 
+const BOOKING_WINDOW_OPTIONS = [
+  { value: "7", label: "7 days" },
+  { value: "14", label: "14 days" },
+  { value: "30", label: "30 days" },
+  { value: "60", label: "60 days" },
+  { value: "90", label: "90 days" },
+];
+
 export function TitleDescriptionForm({
   initialTitle,
   initialDescription,
+  initialBookingWindowDays,
 }: {
   initialTitle: string;
   initialDescription: string | null;
+  initialBookingWindowDays: number;
 }) {
   const router = useRouter();
   const [title, setTitle] = useState(initialTitle);
   const [description, setDescription] = useState(initialDescription ?? "");
+  const [bookingWindowDays, setBookingWindowDays] = useState(String(initialBookingWindowDays));
   const [labelError, setLabelError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -38,7 +50,7 @@ export function TitleDescriptionForm({
     try {
       await clientFetch("/owner/form", {
         method: "PUT",
-        body: JSON.stringify({ title, description }),
+        body: JSON.stringify({ title, description, bookingWindowDays: Number(bookingWindowDays) }),
       });
       toast.success("Your booking form has been updated");
       router.refresh();
@@ -77,6 +89,24 @@ export function TitleDescriptionForm({
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Shown to customers above the booking form"
           />
+        </div>
+
+        <div>
+          <label htmlFor="booking-window-days" className="mb-1.5 block text-sm font-medium text-text-primary">
+            How far ahead can customers book?
+          </label>
+          <Select value={bookingWindowDays} onValueChange={(value) => value && setBookingWindowDays(value)}>
+            <SelectTrigger id="booking-window-days" className="w-full sm:w-48">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {BOOKING_WINDOW_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {submitError && (
