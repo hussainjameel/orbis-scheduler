@@ -314,3 +314,47 @@ The two halves are animated separately so they can be different colours. */
   0%, 49% { opacity: 0; }
   50%, 100% { opacity: 1; }
 }
+
+/* Landing page hero — logo lockup cross-fade, background shape drift, CTA sheen.
+   Separate from the spinner keyframes above: those snap (steps(1)) to signal work
+   in progress, these ease smoothly for decorative motion. */
+@keyframes orbis-fade-a {
+  0%, 44% { opacity: 1; }
+  56%, 100% { opacity: 0; }
+}
+
+@keyframes orbis-fade-b {
+  0%, 44% { opacity: 0; }
+  56%, 100% { opacity: 1; }
+}
+
+@keyframes orbis-sheen {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(320%); }
+}
+
+/* Hero background blob — organic morph behind the left-hand copy. 0%/100%
+   are identical so the infinite loop never jumps; the midpoint carries the
+   shape/position/scale change. */
+@keyframes orbis-blob-morph {
+  0%, 100% {
+    border-radius: 60% 40% 55% 45% / 50% 55% 45% 50%;
+    transform: translate(0, 0) scale(0.97);
+  }
+  50% {
+    border-radius: 45% 55% 65% 35% / 55% 45% 60% 40%;
+    transform: translate(16px, -12px) scale(1.04);
+  }
+}
+
+/* Hero product-card mock — gentle float. */
+@keyframes orbis-card-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+/* Hero product-card mock — staggered slot-row entrance, one-shot (not infinite). */
+@keyframes orbis-row-in {
+  0% { opacity: 0; transform: translateX(8px); }
+  100% { opacity: 1; transform: translateX(0); }
+}

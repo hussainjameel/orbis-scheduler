@@ -10,6 +10,7 @@ Deliberately deferred beyond MVP scope. Not bugs — documented tradeoffs made t
 ## Admin & Platform
 
 - Audit logging for admin actions (who approved/rejected/suspended a business, and when).
+- `users.is_active` exists in the schema for per-account login deactivation (distinct from business suspension via `businesses.is_active`) but has no corresponding admin endpoint — none of the 7 admin routes touch it. Currently dead schema, not wired to anything. Would need a new `PATCH /admin/users/:id` route before it's usable. Business suspension (`businesses.is_active` via the existing Suspend/Activate actions) is what actually gates an owner's dashboard access today.
 - Selectable stats date range for `GET /admin/stats` — currently two fixed windows only (all-time lifetime total, rolling 7-day recent activity). A future version could offer last week/month/year or a custom range picker.
 - Suspension notification email to business owners — currently silent by design (per the use case doc).
 
@@ -37,6 +38,7 @@ Deliberately deferred beyond MVP scope. Not bugs — documented tradeoffs made t
 
 - UC9 alternate flow A3 states cross-tenant booking access returns "403 Forbidden." The actual implementation consistently returns `404` across the entire codebase (chosen for its stronger anti-enumeration property — a `403` would confirm a resource exists). Doc wording is stale and should be updated to match.
 - The API endpoint reference doc's header states "27 routes," but the document's own per-group table sums to 29. Stale count, should be corrected.
+- `GET /admin/me` (added to support the admin sidebar's identity block, mirroring `GET /owner/business`) brings the real total to 30 routes and Admin to 8. `docs/Orbis_Scheduler_API_Endpoints.docx` and the frontend spec PDF's "Admin (7 routes)" / "29 endpoints" figures are now stale by one — same kind of doc drift as the point above. Not corrected here since both are binary documents; `CLAUDE.md` has been updated to say 30.
 - UC2 A3 ("This slot was just booked, please select another") and UC3 A1 ("Sorry, this slot was just requested by someone else. Please select another time.") give two different wordings for what the shipped code treats as one event — `POST /public/bookings` returns a single message, `"This slot was just taken. Please select another time."`, on both the optimistic pre-check and the real DB-race path. Neither UC's copy matches what actually ships. The two use cases should be reconciled with each other and with the real string.
 - UC2 A2 quotes "Invalid value for [field label]"; the backend actually returns `"${field.label} must be one of the provided options"` (`public.ts`). Doc wording is stale.
 - UC1 alternate flows A1–A4 describe three distinguishable customer-facing messages for a nonexistent/pending/rejected/suspended business. The backend deliberately returns one identical `404` for all four (the same anti-enumeration property as the UC9/403 point above), so no frontend can ever show the differentiated copy UC1 describes. Doc should be updated to reflect the one-message reality.

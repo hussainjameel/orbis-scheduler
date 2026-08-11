@@ -1,5 +1,5 @@
 import { LogoSpinner } from "@/components/logo";
-import { ThemeScript } from "./theme-script";
+import { ThemeScript } from "@/components/theme-script";
 
 // Not RouteLoading (frontend/src/components/route-loading.tsx) — that component
 // relies on a flex-column ancestor only the (owner) layout provides. This route has

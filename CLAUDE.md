@@ -8,7 +8,7 @@ This file sits at the repository root and applies to both applications.
 
 Orbis Scheduler is a university capstone project (Torrens Australia, ITA602) built by a two-person team on a fixed trimester timeline. See `docs/TIMELINE.md` for the week-by-week plan.
 
-**Backend is feature-complete.** All 29 endpoints built, tested against a live dev database, and merged. Covers auth, tenant isolation, business profile, availability, the dynamic form builder, slot calculation, the full booking lifecycle, and admin platform management.
+**Backend is feature-complete.** All 30 endpoints built, tested against a live dev database, and merged. Covers auth, tenant isolation, business profile, availability, the dynamic form builder, slot calculation, the full booking lifecycle, and admin platform management.
 
 **Frontend is scaffolded but has no screens yet.** Next.js is installed, the design system is wired into Tailwind, and shadcn/ui is initialised. No routes, forms, or API integration exist yet.
 

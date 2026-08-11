@@ -29,7 +29,7 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${dmSans.variable} ${geistMono.variable} h-full antialiased`}
-      // The booking page's ThemeScript (app/(public)/book/[businessId]/theme-script.tsx)
+      // ThemeScript (components/theme-script.tsx), used by every chrome-less public page,
       // mutates this element's class before hydration runs, to apply dark mode without a
       // flash — that's a deliberate, out-of-band DOM write React can't know about ahead of
       // time, and would otherwise log a hydration-mismatch warning every load. Standard,

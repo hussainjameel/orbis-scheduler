@@ -7,9 +7,9 @@
 // real blocking <script> instead: part of the server-rendered HTML, executed by the
 // browser as it parses, before hydration paints anything. Reads the same localStorage
 // key useTheme() uses first (a visitor who's also used the owner dashboard on this
-// browser gets their real preference), falling back to prefers-color-scheme. Used by
-// both page.tsx (every return branch) and loading.tsx, so a cold visitor never sees a
-// light-mode flash on either the loading spinner or the loaded content.
+// browser gets their real preference), falling back to prefers-color-scheme. Shared by
+// every public, chrome-less page (the booking page and its loading state, the landing
+// page) so a cold visitor never sees a light-mode flash on any of them.
 export function ThemeScript() {
   return (
     <script

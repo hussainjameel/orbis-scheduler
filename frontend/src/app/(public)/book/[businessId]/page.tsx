@@ -4,7 +4,7 @@ import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
 import type { PublicBusiness } from "@/lib/public-booking";
 import { BookingPageClient } from "./booking-page-client";
-import { ThemeScript } from "./theme-script";
+import { ThemeScript } from "@/components/theme-script";
 
 // The backend deliberately returns an identical 404 for a nonexistent business, a
 // pending approval, a rejected one, and a suspended one (tenant-enumeration
