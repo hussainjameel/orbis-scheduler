@@ -5,6 +5,7 @@ import { ErrorState } from "@/components/error-state";
 import type { PublicBusiness } from "@/lib/public-booking";
 import { BookingPageClient } from "./booking-page-client";
 import { ThemeScript } from "@/components/theme-script";
+import { IframeEscapeBridge } from "./iframe-escape-bridge";
 
 // The backend deliberately returns an identical 404 for a nonexistent business, a
 // pending approval, a rejected one, and a suspended one (tenant-enumeration
@@ -14,6 +15,7 @@ function BusinessUnavailable() {
   return (
     <div className="flex min-h-screen items-center justify-center px-6">
       <ThemeScript />
+      <IframeEscapeBridge />
       <EmptyState icon={Ban} heading="Business not found" body="This booking link may be incorrect or no longer active." />
     </div>
   );
@@ -33,6 +35,7 @@ export default async function PublicBookingPage({ params }: { params: Promise<{ 
     return (
       <div className="flex min-h-screen items-center justify-center px-6">
         <ThemeScript />
+      <IframeEscapeBridge />
         <ErrorState heading="Something went wrong" body="Couldn't load this booking page. Please try again." />
       </div>
     );
@@ -44,6 +47,7 @@ export default async function PublicBookingPage({ params }: { params: Promise<{ 
     return (
       <div className="flex min-h-screen items-center justify-center px-6">
         <ThemeScript />
+      <IframeEscapeBridge />
         <EmptyState icon={Ban} heading="Booking form not available" body="This business hasn't set up a booking form yet." />
       </div>
     );
@@ -52,6 +56,7 @@ export default async function PublicBookingPage({ params }: { params: Promise<{ 
   return (
     <>
       <ThemeScript />
+      <IframeEscapeBridge />
       <BookingPageClient business={business} />
     </>
   );

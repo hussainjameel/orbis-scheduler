@@ -17,4 +17,6 @@ build/
 .DS_Store
 Thumbs.db
 
-frontend/
+# Local-only manual test fixtures — hardcodes live dev-DB business ids,
+# same reasoning as backend/scripts/ (see CLAUDE.md).
+businesses/

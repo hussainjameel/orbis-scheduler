@@ -1,7 +1,7 @@
 import { apiFetch } from "@/lib/api";
 import { getOrigin } from "@/lib/origin";
 import { CopyButton } from "./copy-button";
-import { EmbedSnippet } from "./embed-snippet";
+import { EmbedSection } from "./embed-section";
 import { QrSection } from "./qr-section";
 import { TestBookingPageButton } from "./test-booking-page-button";
 
@@ -12,9 +12,6 @@ export default async function SharePage() {
   ]);
 
   const bookingUrl = `${origin}/book/${business.id}`;
-  // data-business-id is a placeholder attribute name — widget.js doesn't
-  // exist yet (decision 6: vanilla JS served from /public, separate work).
-  const embedSnippet = `<script src="${origin}/widget.js" data-business-id="${business.id}"></script>`;
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col">
@@ -40,16 +37,7 @@ export default async function SharePage() {
           </div>
         </div>
 
-        <div className="rounded-md border border-border-default bg-surface-2 p-4">
-          <h2 className="mb-1 text-xl font-medium text-text-primary">Embed on your website</h2>
-          <p className="mb-3 text-sm text-text-secondary">
-            Paste this snippet before the closing &lt;/body&gt; tag to add a booking button to your site.
-          </p>
-          <div className="flex items-start gap-2">
-            <EmbedSnippet snippet={embedSnippet} />
-            <CopyButton text={embedSnippet} toastMessage="Snippet copied" />
-          </div>
-        </div>
+        <EmbedSection origin={origin} businessId={business.id} />
 
         <div className="rounded-md border border-border-default bg-surface-2 p-4">
           <h2 className="mb-1 text-xl font-medium text-text-primary">QR code</h2>
