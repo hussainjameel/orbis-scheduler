@@ -3,9 +3,13 @@
   "version": "1.0.0",
   "type": "module",
   "main": "index.js",
+  "engines": {
+    "node": "24.x"
+  },
   "scripts": {
     "dev": "nodemon --exec tsx src/index.ts",
     "build": "tsc",
+    "postinstall": "prisma generate",
     "start": "node dist/index.js",
     "listOwners": "npx tsx scripts/listOwners.ts",
     "deleteTestUsers": "npx tsx scripts/deleteTestUsers.ts",
