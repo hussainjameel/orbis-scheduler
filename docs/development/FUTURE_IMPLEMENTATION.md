@@ -14,6 +14,16 @@ Deliberately deferred beyond MVP scope. Not bugs — documented tradeoffs made t
 - Selectable stats date range for `GET /admin/stats` — currently two fixed windows only (all-time lifetime total, rolling 7-day recent activity). A future version could offer last week/month/year or a custom range picker.
 - Suspension notification email to business owners — currently silent by design (per the use case doc).
 
+## Form Builder
+
+- Owner-initiated protected field change requests: `FormField.isProtected` fields (Name/Email) are permanently locked after creation — an owner who needs to fix a typo or rename one currently has no path to do it themselves. Add an owner-facing "request change" flow (submits a request rather than a direct `PATCH /form/fields/:id`, since that route already 400s on a protected field) plus minimal admin-side functionality to review and apply it — mirrors the existing business approve/reject pattern rather than inventing a new one.
+
+## Bookings Management
+
+- Archive and permanent delete for bookings, beyond today's status lifecycle (`pending`/`approved`/`rejected`/`cancelled`) — there's currently no way to remove a booking from the owner's list at all. Needs a soft "archived" state (hidden from the default view, still queryable) plus a genuinely destructive delete, both actionable on a single booking and across a selected date range — the latter needs multi-select UI on the bookings list (today's actions are single-row only) and a new bulk endpoint, since existing routes only ever act on one booking id at a time.
+- Search/filter the owner bookings list by date and by customer name — `GET /owner/bookings` currently only filters by `status` (the five count pills); no date or name query params exist yet.
+- Sort the bookings list ascending/descending by date and by name — the list currently returns in a fixed order with no sort control in the UI or a `sort`/`order` query param on the route.
+
 ## Registration & Trust
 
 - Email verification at registration.

@@ -6,31 +6,39 @@ This file sits at the repository root and applies to both applications.
 
 ## Project status
 
-Orbis Scheduler is a university capstone project (Torrens Australia, ITA602) built by a two-person team on a fixed trimester timeline. See `docs/TIMELINE.md` for the week-by-week plan.
+Orbis Scheduler is a university capstone project (Torrens Australia, ITA602) built by a two-person team on a fixed trimester timeline. See `docs/planning/TIMELINE.md` for the week-by-week plan.
 
 **Backend is feature-complete.** All 30 endpoints built, tested against a live dev database, and merged. Covers auth, tenant isolation, business profile, availability, the dynamic form builder, slot calculation, the full booking lifecycle, and admin platform management.
 
-**Frontend is scaffolded but has no screens yet.** Next.js is installed, the design system is wired into Tailwind, and shadcn/ui is initialised. No routes, forms, or API integration exist yet.
+**Frontend is also feature-complete.** All 16 screens across the 3 route groups (public, owner, admin) are built and wired to the real API, plus the embeddable `widget.js` booking popup. See `docs/development/IMPLEMENTATION_NOTES.md` for the screen-by-screen build record and known deviations from spec.
 
 ## Repository layout
 
-- `backend/` — Express + TypeScript API, Prisma/PostgreSQL (Neon).
-- `frontend/` — Next.js 16 + React 19 + Tailwind v4.
-- `database/` — schema design docs, kept in sync with `backend/prisma/schema.prisma` by hand:
-  - `db_schema.dbml` — dbdiagram.io source (design intent, includes notes/indexes).
-  - `db_schema.sql` — plain SQL DDL equivalent.
-- `docs/` — project artifacts: timeline, use cases, ERD, API endpoint reference, `DEVLOG.md`, `FUTURE_IMPROVEMENTS.md`, and the two frontend specifications below.
+- `backend/` — Express + TypeScript API, Prisma/PostgreSQL (Neon). See `backend/README.md` for setup and structure.
+- `frontend/` — Next.js 16 + React 19 + Tailwind v4. See `frontend/README.md` for setup and structure.
+- `businesses/` — two standalone HTML fixtures (`af-architects.html`, `second-business.html` / Willow & Vine) simulating third-party sites, for manually testing `widget.js` cross-origin. Each business's real UUID is hardcoded into its HTML file — don't delete or rename those test businesses without updating the fixture. Serve with `npx serve businesses -p 4321`; always pass `-p 4321` explicitly — `serve`'s own default port is 3000, which collides with the frontend and silently breaks the embed (widget.js 404s through the wrong server). Full steps in `businesses/README.md`.
+- `docs/` — project artifacts, organized by topic (kept in sync with `backend/prisma/schema.prisma` by hand where relevant):
+  - `docs/database/` — `schema.dbml` (dbdiagram.io source) and `schema.sql` (plain SQL DDL), plus the ERD.
+  - `docs/architecture/` — system architecture diagram, project data model, and supporting diagrams (JWT auth flow, slot generation, widget integration).
+  - `docs/api/` — API endpoint reference.
+  - `docs/requirements/` — use cases and use case diagram.
+  - `docs/frontend/` — `frontend-specification.pdf` and `design-specification.pdf` (see below).
+  - `docs/development/` — `DEVLOG.md`, `FUTURE_IMPLEMENTATION.md`, and `IMPLEMENTATION_NOTES.md`.
+  - `docs/planning/` — `TIMELINE.md`, Gantt chart.
+  - `docs/reports/` — academic assessment reports.
+  - `docs/README.md` indexes all of the above.
+- Root `README.md` — project overview, live demo link, local run instructions, and deployment notes (Vercel for the frontend, Render for the backend).
 
 ## Specifications — read these before frontend work
 
-Two documents in `docs/` govern all frontend implementation. Neither is optional context.
+Two documents in `docs/frontend/` govern all frontend implementation. Neither is optional context.
 
-**`Orbis_Scheduler_Frontend_Specification.pdf`**
+**`frontend-specification.pdf`**
 - Every screen (18 across 3 actors), mapped one-to-one against backend endpoints
 - Recommended build order
 - Fifteen architecture decisions, each with reasoning — data fetching, session storage, route protection, validation scope, notifications, the embed widget, responsive scope, styling, form state, and more
 
-**`Orbis_Scheduler_Design_Specification.pdf`**
+**`design-specification.pdf`**
 - The full palette for both modes, with exact values and usage rules
 - Type scale, spacing scale, radius scale
 - Component states, patterns (icons, shadows, toasts, empty states, form layout, motion)
@@ -183,11 +191,11 @@ Adding a component installs its Base UI dependency and writes the file. Componen
 - **Two font weights only** — 400 and 500. Hierarchy comes from size, colour, and spacing.
 - **Verify both modes before considering a screen done.** Not at the end of the build.
 
-Full reasoning for all of these is in `docs/Orbis_Scheduler_Design_Specification.pdf`.
+Full reasoning for all of these is in `docs/frontend/design-specification.pdf`.
 
-## Planned structure
+## Route structure
 
-Not yet built. Route groups will be:
+Built. Route groups:
 
 - `src/app/(public)/` — landing, auth screens, public booking page. No auth.
 - `src/app/(owner)/` — dashboard, profile, availability, form builder, bookings. Auth guard in the layout.
@@ -201,12 +209,12 @@ Session handling per decision 9 of the frontend specification: JWT stored in an 
 
 ## Devlog
 
-After completing any feature work (not trivial fixes or typos), append a dated entry to `docs/DEVLOG.md` in the existing format — Shipped / Verified / Blocking fixes / Open questions / Next up. Newest entries at the top, below the header. Don't ask permission; do it as the last step of the session.
+After completing any feature work (not trivial fixes or typos), append a dated entry to `docs/development/DEVLOG.md` in the existing format — Shipped / Verified / Blocking fixes / Open questions / Next up. Newest entries at the top, below the header. Don't ask permission; do it as the last step of the session.
 
 ## Future improvements
 
-`docs/FUTURE_IMPROVEMENTS.md` tracks deliberately deferred, out-of-scope items. Add to it whenever a real gap or deferred feature comes up rather than leaving it in conversation only.
+`docs/development/FUTURE_IMPLEMENTATION.md` tracks deliberately deferred, out-of-scope items. Add to it whenever a real gap or deferred feature comes up rather than leaving it in conversation only.
 
 ## Test data
 
-"AF Architects" is a persistent test business used for manual Postman testing across sessions. It is not leftover data — never delete it or flag it as an unexplained cleanup gap.
+"AF Architects" and "Willow & Vine Hair Studio" are persistent test businesses used for manual Postman testing and for the `businesses/` widget fixtures across sessions. They are not leftover data — never delete them, rename them, or flag them as an unexplained cleanup gap. Their business IDs are hardcoded into `businesses/af-architects.html` and `businesses/second-business.html`; if either business is ever recreated, those files need updating too.

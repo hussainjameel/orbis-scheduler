@@ -10,7 +10,7 @@ It draws on `docs/DEVLOG.md`, `docs/FUTURE_IMPROVEMENTS.md`, `CLAUDE.md`, the gi
 
 - **Backend**: feature-complete. 30 endpoints (not 29 — see [§3](#3-doc-corrections-the-docs-themselves-got-out-of-date)) across `/auth`, `/public`, `/owner`, `/admin`. Matches the original design closely; most divergence is *resolving ambiguity the docs left open*, not deviation from intent.
 - **Frontend**: every screen in the spec's build order is built and wired to the real API — auth (login/register/forgot/reset), the public booking page, the full owner dashboard (home, bookings list + detail, availability, form builder, share & embed, settings), and all three admin screens (overview, business list, business detail) — plus `widget.js`, the embeddable popup-modal script, built 2026-08-12. Every piece of the original frontend spec's scope is now shipped.
-- **`CLAUDE.md`'s frontend section is stale.** It currently reads "Frontend is scaffolded but has no screens yet" — true as of 2026-07-31, not true since. Worth a follow-up edit; not done as part of this document since it's a statement of fact about the repo, not history.
+- **`CLAUDE.md`'s frontend section was stale** — it read "Frontend is scaffolded but has no screens yet" (true as of 2026-07-31, not true since). **Fixed 2026-08-18** along with the doc-path updates from the `docs/` reorganization (see [§6](#6-repo-hygiene-issue-found-while-writing-this-document-resolved)).
 
 ---
 
@@ -112,15 +112,17 @@ Consolidated from `docs/FUTURE_IMPROVEMENTS.md`. These are documented trade-offs
 
 ---
 
-## 6. Repo hygiene issue found while writing this document
+## 6. Repo hygiene issue found while writing this document (resolved)
 
-While reconstructing the frontend build history for this document, `docs/DEVLOG.md` turned out to be in a broken state worth flagging directly:
+While reconstructing the frontend build history for this document, `docs/DEVLOG.md` turned out to be in a broken state:
 
-- The file currently contains **unresolved git merge-conflict markers** (`<<<<<<< HEAD`, `=======`, `>>>>>>>`) committed straight to `main` — visible at the top of the file today.
-- The most recent commit touching it, `ee0b727` ("devlog updated"), didn't resolve that conflict — it **deleted roughly 450 lines** of real session history (net −436 lines) while leaving the conflict markers in place. The entries lost from the committed file include the sessions for the admin screens, the public booking page (and its email-validation and dark-mode fixes), the availability screen, the form builder, Share & Embed, Settings, and Dashboard Home — all real, already-shipped work with no committed record left of *how* or *why* it was built.
-- That history is **not actually gone** — it's recoverable from git at commit `b8d9e00` (`git show b8d9e00:docs/DEVLOG.md`), one commit before the deletion. This document was written using that recovered version as a source, which is how the detail in [§4](#4-frontend-screen-by-screen-what-changed-and-why) above was reconstructed.
+- The file contained **unresolved git merge-conflict markers** (`<<<<<<< HEAD`, `=======`, `>>>>>>>`) committed straight to `main`.
+- The most recent commit touching it at the time, `ee0b727` ("devlog updated"), didn't resolve that conflict — it **deleted roughly 450 lines** of real session history (net −436 lines) while leaving the conflict markers in place. The entries lost from the committed file included the sessions for the admin screens, the public booking page (and its email-validation and dark-mode fixes), the availability screen, the form builder, Share & Embed, Settings, and Dashboard Home — all real, already-shipped work with no committed record left of *how* or *why* it was built.
+- That history was recovered from git at commit `b8d9e00` (`git show b8d9e00:docs/DEVLOG.md`), one commit before the deletion, and used as a source for [§4](#4-frontend-screen-by-screen-what-changed-and-why) above.
 
-This is worth fixing properly — restoring the fuller history and resolving the conflict markers for real — rather than leaving `docs/DEVLOG.md` in its current, actively-broken state. Happy to do that as a follow-up if wanted; it wasn't done as part of this document since it's a separate, deliberate edit to a different file.
+**Update (2026-08-18): fixed.** `docs/DEVLOG.md` (now relocated to `docs/development/DEVLOG.md` as part of the docs reorganization — see below) has no conflict markers and runs the full 916-line history back to the 2026-07-01 register endpoint, including a same-file entry dated 2026-08-03 documenting the restoration itself. Verified against the committed `HEAD` copy — identical, byte-for-byte.
+
+**Also since this document was written**: `docs/` was reorganized from a flat file dump into topic subfolders (`docs/database/`, `docs/architecture/`, `docs/api/`, `docs/requirements/`, `docs/frontend/`, `docs/development/`, `docs/planning/`, `docs/reports/`) with a `docs/README.md` index, and the old top-level `database/` folder was folded into `docs/database/`. `CLAUDE.md` has been updated to reference the new paths. This document's path references above (e.g. `docs/DEVLOG.md`, `docs/FUTURE_IMPROVEMENTS.md`) are left as-is since they're accurate for the git history/commits being discussed at the time this document was written.
 
 ---
 

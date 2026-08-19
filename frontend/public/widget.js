@@ -68,10 +68,25 @@
     "*{box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;}",
     "@media (prefers-reduced-motion: reduce){*{animation-duration:0.01ms!important;transition-duration:0.01ms!important;}}",
 
-    ".orbis-btn{position:fixed;right:20px;bottom:20px;z-index:2147483647;display:inline-flex;align-items:center;gap:8px;height:48px;padding:0 20px;border:0;border-radius:9999px;background:#e8590c;color:#fff;font-size:15px;font-weight:500;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.25);transition:background .15s ease,transform .1s ease;}",
+    ".orbis-btn{position:fixed;right:20px;bottom:20px;z-index:2147483647;display:inline-flex;align-items:center;gap:8px;height:48px;padding:0 20px;border:0;border-radius:9999px;background:#e8590c;color:#fff;font-size:15px;font-weight:500;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.25);transition:background .15s ease,transform .1s ease,width .2s ease,padding .2s ease;}",
     ".orbis-btn:hover{background:#d14d08;}",
     ".orbis-btn:active{transform:translateY(1px);}",
     ".orbis-btn:focus-visible{outline:2px solid #e8590c;outline-offset:2px;}",
+    ".orbis-btn-icon{flex-shrink:0;}",
+    ".orbis-btn-label{white-space:nowrap;overflow:hidden;}",
+    // Desktop-only: stays a compact, unobtrusive icon-only circle pinned in
+    // the corner (still fully clickable/tappable at all times — this is a
+    // progressive visual enhancement, not a change to when the modal can be
+    // opened) and expands into the full labeled pill on hover *or* keyboard
+    // focus, so the label is never hover-only-reachable for a11y. Gated to
+    // real hover-capable pointers so touch visitors (who can't hover) always
+    // get the fully-labeled, more-discoverable button instead of a bare icon.
+    "@media (hover:hover) and (pointer:fine){"
+      + ".orbis-btn{width:48px;padding:0;justify-content:center;gap:0;}"
+      + ".orbis-btn-label{max-width:0;opacity:0;margin-left:0;transition:max-width .2s ease,opacity .15s ease,margin-left .2s ease;}"
+      + ".orbis-btn:hover,.orbis-btn:focus-visible{width:150px;padding:0 18px;justify-content:flex-start;}"
+      + ".orbis-btn:hover .orbis-btn-label,.orbis-btn:focus-visible .orbis-btn-label{max-width:100px;opacity:1;margin-left:8px;}"
+      + "}",
 
     ".orbis-backdrop{position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;opacity:0;transition:opacity .15s ease;}",
     ".orbis-backdrop.orbis-open{display:flex;opacity:1;}",
@@ -140,7 +155,12 @@
     btn.type = "button";
     btn.className = "orbis-btn";
     btn.setAttribute("aria-haspopup", "dialog");
-    btn.textContent = "Book now";
+    btn.setAttribute("aria-label", "Book now");
+    btn.innerHTML =
+      '<svg class="orbis-btn-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">' +
+      '<rect x="3" y="4.5" width="14" height="12.5" rx="2" stroke="currentColor" stroke-width="1.6"/>' +
+      '<path d="M3 8h14M6.5 2.5v3M13.5 2.5v3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>' +
+      '</svg><span class="orbis-btn-label">Book now</span>';
     shadow.appendChild(btn);
   }
 

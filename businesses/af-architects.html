@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AF Architects — Design that endures</title>
+<meta name="description" content="AF Architects is a residential and commercial architecture practice based in Sydney.">
+<style>
+  :root{
+    --ink:#1c1c1c;
+    --sub:#4a453d;
+    --line:#ddd8ce;
+    --paper:#f4f2ee;
+    --panel:#fff;
+    --accent:#8a6a3c;
+    --accent-line:#c9a35a;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: Georgia, 'Times New Roman', serif;
+    color: var(--ink);
+    background: var(--paper);
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; }
+  img { max-width: 100%; display: block; }
+
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    padding: 22px 48px;
+    background: rgba(244,242,238,.86);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  header .brand { font-size: 19px; letter-spacing: 3px; text-transform: uppercase; }
+  header .brand span { color: var(--accent); }
+  nav a { margin-left: 32px; color: var(--sub); text-decoration: none; font-size: 13px; letter-spacing: 1.5px; text-transform: uppercase; }
+  nav a:hover { color: var(--ink); }
+
+  .hero {
+    position: relative;
+    height: min(86vh, 720px);
+    min-height: 460px;
+    display: flex;
+    align-items: flex-end;
+    background: #2b2620;
+  }
+  .hero img {
+    position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .82;
+  }
+  .hero::after {
+    content: "";
+    position: absolute; inset: 0;
+    background: linear-gradient(0deg, rgba(20,17,12,.88) 0%, rgba(20,17,12,.25) 55%, rgba(20,17,12,.05) 100%);
+  }
+  .hero-content { position: relative; z-index: 1; max-width: 900px; margin: 0 auto; padding: 0 48px 72px; color: #f4f1ea; }
+  .hero-eyebrow { font-size: 13px; letter-spacing: 3px; text-transform: uppercase; color: var(--accent-line); margin: 0 0 18px; }
+  .hero h1 { font-size: clamp(32px, 5vw, 54px); font-weight: 400; line-height: 1.2; margin: 0 0 20px; max-width: 14ch; }
+  .hero p { font-size: 17px; line-height: 1.7; color: #d9d2c4; max-width: 52ch; margin: 0; }
+
+  main { max-width: 1080px; margin: 0 auto; padding: 0 48px; }
+  section { padding: 96px 0; border-bottom: 1px solid var(--line); }
+  section:last-of-type { border-bottom: none; }
+
+  .section-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; margin-bottom: 48px; }
+  .section-head .kicker { font-size: 13px; letter-spacing: 3px; text-transform: uppercase; color: var(--accent); margin: 0 0 12px; }
+  .section-head h2 { font-size: 32px; font-weight: 400; margin: 0; }
+  .section-head p { max-width: 40ch; font-size: 15px; line-height: 1.7; color: var(--sub); margin: 0; }
+
+  .work-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; }
+  .work-card { position: relative; overflow: hidden; border-radius: 2px; background: #e7e3da; }
+  .work-card img { width: 100%; height: 320px; object-fit: cover; transition: transform .5s ease; }
+  .work-card:hover img { transform: scale(1.06); }
+  .work-card .tag {
+    position: absolute; left: 18px; bottom: 18px; color: #fff; z-index: 1;
+    font-size: 13px; letter-spacing: 1.5px; text-transform: uppercase;
+  }
+  .work-card .tag b { display: block; font-family: Georgia, serif; font-size: 19px; letter-spacing: 0; text-transform: none; margin-bottom: 4px; }
+  .work-card::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(0deg, rgba(15,13,10,.75) 0%, rgba(15,13,10,0) 45%);
+  }
+
+  .studio { display: grid; grid-template-columns: 1fr 1fr; gap: 64px; align-items: center; }
+  .studio img { border-radius: 2px; width: 100%; height: 420px; object-fit: cover; }
+  .studio h2 { font-size: 30px; font-weight: 400; margin: 0 0 20px; }
+  .studio p { font-size: 16px; line-height: 1.8; color: var(--sub); margin: 0 0 18px; }
+  .founder { display: flex; align-items: center; gap: 14px; margin-top: 32px; }
+  .founder img { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; }
+  .founder .name { font-size: 15px; }
+  .founder .role { font-size: 13px; color: var(--sub); }
+
+  blockquote {
+    margin: 0; font-size: clamp(24px, 3vw, 32px); font-weight: 400; line-height: 1.5; font-style: italic;
+    max-width: 760px; color: #2c2a24;
+  }
+  blockquote::before { content: "\201C"; color: var(--accent-line); }
+  blockquote::after { content: "\201D"; color: var(--accent-line); }
+  cite { display: block; margin-top: 24px; font-style: normal; font-size: 14px; letter-spacing: 1px; text-transform: uppercase; color: var(--sub); }
+
+  .cta { text-align: center; padding: 100px 0; }
+  .cta h2 { font-size: 34px; font-weight: 400; max-width: 20ch; margin: 0 auto 16px; }
+  .cta p { font-size: 16px; color: var(--sub); max-width: 46ch; margin: 0 auto; line-height: 1.7; }
+
+  footer {
+    padding: 36px 48px; font-size: 13px; color: #8a8578; border-top: 1px solid var(--line);
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+  }
+  footer nav a { margin: 0 0 0 20px; font-size: 13px; letter-spacing: normal; text-transform: none; }
+
+  /* Sticky-corner nudge: a page-level hint that lives alongside the widget's
+     own fixed corner button (bottom:20px;right:20px, ~48px tall) — pure host-
+     page decoration, doesn't touch or know about the widget's shadow DOM.
+     Pointer-events are off so it never intercepts a click meant for the real
+     button sitting just beneath it. Fades in after the visitor's had a
+     moment to read the page, then gently bobs to draw the eye toward the
+     corner where the widget lives. */
+  .nudge {
+    position: fixed;
+    right: 22px;
+    bottom: 78px;
+    z-index: 2147483646;
+    background: #fff;
+    color: #2c2a24;
+    font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 9px 14px;
+    border-radius: 8px;
+    box-shadow: 0 6px 20px rgba(20,17,12,.18);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(6px);
+    animation: nudge-in .5s ease 2.2s forwards, nudge-bob 2.4s ease 3s infinite;
+  }
+  .nudge::after {
+    content: ""; position: absolute; right: 20px; bottom: -5px;
+    width: 10px; height: 10px; background: #fff; transform: rotate(45deg);
+  }
+  @keyframes nudge-in { to { opacity: 1; transform: translateY(0); } }
+  @keyframes nudge-bob { 0%,100%{ transform: translateY(0); } 50%{ transform: translateY(-4px); } }
+  @media (prefers-reduced-motion: reduce) { .nudge { animation: nudge-in .5s ease 1s forwards; } }
+  @media (max-width: 640px) { .nudge { display: none; } }
+
+  @media (max-width: 860px) {
+    header, main, footer { padding-left: 24px; padding-right: 24px; }
+    .work-grid { grid-template-columns: 1fr 1fr; }
+    .studio { grid-template-columns: 1fr; gap: 32px; }
+    .studio img { height: 300px; }
+  }
+  @media (max-width: 560px) {
+    header { padding: 16px 20px; }
+    nav a { margin-left: 18px; font-size: 12px; }
+    section { padding: 64px 0; }
+    .work-grid { grid-template-columns: 1fr; }
+    .section-head { flex-direction: column; align-items: flex-start; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">AF <span>Architects</span></div>
+  <nav>
+    <a href="#work">Work</a>
+    <a href="#studio">Studio</a>
+    <a href="#contact">Contact</a>
+  </nav>
+</header>
+
+<section class="hero">
+  <img src="https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=1800&auto=format&fit=crop" alt="Modern minimalist house exterior with clean concrete lines">
+  <div class="hero-content">
+    <p class="hero-eyebrow">Residential &amp; commercial architecture — Sydney</p>
+    <h1>We design buildings that outlive the trends that inspired them.</h1>
+    <p>A small practice working across new builds, renovations, and interior architecture — every project starts with a conversation, not a template.</p>
+  </div>
+</section>
+
+<main>
+  <section id="work">
+    <div class="section-head">
+      <div>
+        <p class="kicker">Selected work</p>
+        <h2>Recent projects</h2>
+      </div>
+      <p>A cross-section of new builds, adaptive reuse, and full interior fit-outs across greater Sydney.</p>
+    </div>
+    <div class="work-grid">
+      <div class="work-card">
+        <img src="https://images.unsplash.com/photo-1449844908441-8829872d2607?q=80&w=900&auto=format&fit=crop" alt="Modern house at dusk with warm interior lighting">
+        <div class="tag"><b>Birchgrove House</b>New build — residential</div>
+      </div>
+      <div class="work-card">
+        <img src="https://images.unsplash.com/photo-1518005020951-eccb494ad742?q=80&w=900&auto=format&fit=crop" alt="Bright open-plan living room with timber ceiling">
+        <div class="tag"><b>Paddington Terrace</b>Renovation — interior</div>
+      </div>
+      <div class="work-card">
+        <img src="https://images.unsplash.com/photo-1524230572899-a752b3835840?q=80&w=900&auto=format&fit=crop" alt="Glass-fronted contemporary building facade">
+        <div class="tag"><b>Alexandria Studio</b>Commercial — fit-out</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="studio">
+    <div class="studio">
+      <div>
+        <p class="kicker">Studio</p>
+        <h2>Design led by how a place will actually be lived in.</h2>
+        <p>Founded in 2014, AF Architects works in small, deliberately limited numbers of projects a year — enough to know every site, every client, and every trade personally.</p>
+        <p>We're rigorous about material honesty and daylight, and stubborn about the belief that good architecture should feel inevitable in hindsight, not novel on the day it opens.</p>
+        <div class="founder">
+          <img src="https://randomuser.me/api/portraits/men/52.jpg" alt="Portrait of Andre Faulkner">
+          <div>
+            <div class="name">Andre Faulkner</div>
+            <div class="role">Founding Principal</div>
+          </div>
+        </div>
+      </div>
+      <img src="https://images.unsplash.com/photo-1493809842364-78817add7ffb?q=80&w=900&auto=format&fit=crop" alt="Architect reviewing drawings at a studio desk">
+    </div>
+  </section>
+
+  <section>
+    <blockquote>
+      They understood the brief before we'd finished explaining it — the finished house feels like it was always meant to be there.
+      <cite>— J. &amp; R. Whitfield, Birchgrove House</cite>
+    </blockquote>
+  </section>
+
+  <section id="contact" class="cta">
+    <h2>Every project starts with a conversation.</h2>
+    <p>Use the booking button in the bottom-right corner to arrange a first consultation — no forms to fill out over email, no back-and-forth.</p>
+  </section>
+</main>
+
+<footer>
+  <div>&copy; 2026 AF Architects — local test fixture, not a real business.</div>
+  <nav>
+    <a href="#work">Work</a>
+    <a href="#studio">Studio</a>
+    <a href="#contact">Contact</a>
+  </nav>
+</footer>
+
+<div class="nudge" aria-hidden="true">Book a consultation ↘</div>
+
+<!-- Real embed snippet, exactly as the Share &amp; Embed screen generates it for
+     AF Architects' actual business id, pointed at the local dev frontend.
+     Auto mode (no data-auto-button attribute): the floating "Book now"
+     button bottom-right is injected entirely by widget.js. -->
+<script src="http://localhost:3000/widget.js" data-business-id="690935e9-9549-4cad-846e-dcb9e4bb2d20"></script>
+</body>
+</html>
